@@ -18,6 +18,9 @@ sealed class MultiScreenSession:IDisposable {
  readonly BitmapCacheBrush sharedBrush;
  readonly BitmapCache sceneCache=new BitmapCache();
  readonly DispatcherTimer topologyTimer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(350)};
+ readonly DispatcherTimer inputTimer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(50)};readonly System.Diagnostics.Stopwatch inputClock=new System.Diagnostics.Stopwatch();readonly SaverInputState inputState=new SaverInputState();
+ [StructLayout(LayoutKind.Sequential)]struct LASTINPUTINFO{public uint Size,Time;}
+ [DllImport("user32.dll")]static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
  Viewbox sourceHost;
  bool rebuilding,closing,disposed;
  [DllImport("gdi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateDC(string driver,string device,string output,IntPtr data);
@@ -31,7 +34,8 @@ sealed class MultiScreenSession:IDisposable {
  topologyTimer.Tick+=RebuildAfterChange;
  SystemEvents.DisplaySettingsChanged+=DisplayChanged;
  }
- public void Show(){Rebuild();}
+ public void Show(){Rebuild();inputClock.Restart();inputTimer.Tick+=CheckInput;inputTimer.Start();}
+ void CheckInput(object sender,EventArgs e){if(disposed||closing||rebuilding)return;var info=new LASTINPUTINFO{Size=(uint)Marshal.SizeOf(typeof(LASTINPUTINFO))};GetLastInputInfo(ref info);var cursor=Forms.Cursor.Position;if(inputState.Update(inputClock.Elapsed.TotalSeconds,new Point(cursor.X,cursor.Y),info.Time)){if(windows.Count>0)windows[0].Close();}}
  void DisplayChanged(object sender,EventArgs e){
  if(disposed||closing)return;
  dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate{if(disposed||closing)return;topologyTimer.Stop();topologyTimer.Start();}));
@@ -75,12 +79,12 @@ sealed class MultiScreenSession:IDisposable {
  }finally{rebuilding=false;}
  }
  void AnyClosed(object sender,EventArgs e){
- if(rebuilding||closing)return;closing=true;
+ if(rebuilding||closing)return;closing=true;inputTimer.Stop();
  topologyTimer.Stop();foreach(var host in windows.ToArray()){host.Closed-=AnyClosed;host.Close();}
  windows.Clear();
  }
  public void Dispose(){
- if(disposed)return;disposed=true;closing=true;
+ if(disposed)return;disposed=true;closing=true;inputTimer.Stop();inputTimer.Tick-=CheckInput;
  SystemEvents.DisplaySettingsChanged-=DisplayChanged;
  topologyTimer.Stop();topologyTimer.Tick-=RebuildAfterChange;
  foreach(var host in windows.ToArray()){host.Closed-=AnyClosed;host.Close();}
