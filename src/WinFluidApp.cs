@@ -178,7 +178,8 @@ sealed class FluidView:Grid {
  public string FrameState{get{return string.Format(CultureInfo.InvariantCulture,"scene={0}, cursor=({1:F2},{2:F2}), dialog=({3:F2},{4:F2}), open={5}, volume_grip=({6:F2},{7:F2})",priorScene,cursorShift.X,cursorShift.Y,dialogX,dialogY,dialogOpen,volumeShift.X+19,volumeShift.Y+10)+string.Format(CultureInfo.InvariantCulture,", keyboard_grip=({0:F2},622), blink_period_s={1:F3}",speedShift.X+16,1.6-blinkPosition*.65);}}
  public Point CursorPosition{get{return new Point(cursorShift.X,cursorShift.Y);}}
  public Brush Paper{get{return paper;}}
- public void CompositeFrame(double t,int scene,double local,Rect visible){motion=t;colorClock=t;wallElapsed=watch.Elapsed.TotalSeconds;sceneIndex=scene;sceneLocal=local;visibleWorld=visible;
+ double compositeActorTime=double.NaN;
+ public void CompositeFrame(double t,int scene,double local,Rect visible,double actorTime=double.NaN){compositeActorTime=actorTime;motion=t;colorClock=t;wallElapsed=double.IsNaN(actorTime)?watch.Elapsed.TotalSeconds:actorTime;sceneIndex=scene;sceneLocal=local;visibleWorld=visible;
  bool changed=scene!=lastCompositeScene;
  if(changed||t>=nextCull||!lastCullRect.Contains(visible)){nextCull=t+.1;lastCullRect=visible;if(!lastCullRect.IsEmpty)lastCullRect.Inflate(32,32);foreach(var tile in surfaceTiles){bool show=lastCullRect.IntersectsWith(tile.Bounds);if(show!=tile.Visible){tile.Visual.Visibility=show?Visibility.Visible:Visibility.Hidden;tile.Visible=show;}}}
  lastCompositeScene=scene;
@@ -208,7 +209,7 @@ sealed class FluidView:Grid {
  static Color FromLab(Lab c){double l=c.L+.3963377774*c.A+.2158037573*c.B;double m=c.L-.1055613458*c.A-.0638541728*c.B;double s=c.L-.0894841775*c.A-1.2914855480*c.B;l=l*l*l;m=m*m*m;s=s*s*s;return Color.FromScRgb(1,Clamp(4.0767416621*l-3.3077115913*m+.2309699292*s),Clamp(-1.2684380046*l+2.6097574011*m-.3413193965*s),Clamp(-.0041960863*l-.7034186147*m+1.7076147010*s));}
 
  void Update(double t,bool force){if(force||wallElapsed>=nextColorUpdate||observedPalette!=Options.Palette){nextColorUpdate=wallElapsed+1.0/30;int idx=Math.Max(0,Math.Min(Bg.Length-1,Options.Palette-1));double phase=(colorClock/180.0%1)*SpectrumLabs.Length;int segment=(int)Math.Floor(phase);Lab target=Options.Palette==0?SpectrumAt(segment,phase-segment):BgLabs[idx];if(observedPalette!=Options.Palette){if(observedPalette>=0){paletteFrom=ToLab(paper.Color);paletteChangedAt=wallElapsed;}observedPalette=Options.Palette;}double manual=SoftEase((wallElapsed-paletteChangedAt)/3);paper.Color=FromLab(manual<1?Blend(paletteFrom,target,manual):target);light.Color=Mix(paper.Color,Color.FromRgb(250,244,224),.8);}
- if(!compositeMode||sceneIndex!=priorScene||t>=nextActor){bool moving=Options.Cinematic&&sceneIndex>=0&&sceneLocal<18;nextActor=t+(moving?1.0/60:.1);if(sceneIndex>=0||priorScene>=0||visibleWorld.IntersectsWith(MouseArea)||visibleWorld.IntersectsWith(SignatureArea))Perform(sceneIndex,sceneLocal,t);}
+ if(!compositeMode||sceneIndex!=priorScene||t>=nextActor){bool moving=Options.Cinematic&&sceneIndex>=0&&sceneLocal<18;nextActor=t+(moving?1.0/60:.1);if(sceneIndex>=0||priorScene>=0||visibleWorld.IntersectsWith(MouseArea)||visibleWorld.IntersectsWith(SignatureArea))Perform(sceneIndex,sceneLocal,double.IsNaN(compositeActorTime)?t:compositeActorTime);}
 
  UpdateDialogPop(t);
  // Only the clock panel reads wall time; offscreen content catches up on entry.

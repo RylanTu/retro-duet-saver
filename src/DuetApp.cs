@@ -16,12 +16,14 @@ static class DuetApp{
  var app=new Application{ShutdownMode=ShutdownMode.OnLastWindowClose};
  if(mode.StartsWith("/p")){long h;string raw=mode.Contains(":")?mode.Substring(mode.IndexOf(':')+1):args.Length>1?args[1]:"0";if(long.TryParse(raw,out h)&&h!=0)app.Run(new DuetWindow(new IntPtr(h)));return;}
  if(mode.StartsWith("/s")){using(var session=new MultiScreenSession()){session.Show();app.Run();}return;}
- var preview=new DuetWindow();if(mode=="--profile"){preview.Seek(args.Length>2?double.Parse(args[2],CultureInfo.InvariantCulture):0);preview.Profile(args[1]);}if(mode=="--bridge")preview.Seek(SharedView.TransitionPreviewTime);if(mode=="--windows")preview.Seek(SharedView.WindowsClockTime+7);if(mode=="--assistant")preview.Seek(SharedView.AssistantTime+7);if(mode=="--new-scenes")preview.Seek(980+6);if(mode=="--windows-review")preview.Seek(1276+6);if(mode=="--scifi")preview.Seek(224+6);app.Run(preview);
+ var preview=new DuetWindow();if(mode=="--profile"){preview.Seek(args.Length>2?double.Parse(args[2],CultureInfo.InvariantCulture):0);preview.Profile(args[1]);}if(mode=="--review"||mode=="--review-normal")preview.Review(mode=="--review");if(mode=="--bridge")preview.Seek(SharedView.TransitionPreviewTime);if(mode=="--windows")preview.Seek(SharedView.WindowsClockTime+7);if(mode=="--assistant")preview.Seek(SharedView.AssistantTime+7);if(mode=="--new-scenes")preview.Seek(980+6);if(mode=="--windows-review")preview.Seek(1276+6);if(mode=="--scifi")preview.Seek(224+6);app.Run(preview);
  }
 }
 sealed class DuetWindow:Window {
  public void Seek(double t){view.RandomOrder=false;view.SetTime(t); }
  public void Profile(string path){view.ProfilePath=path;}
+ public void Review(bool fast){Title="Retro Duet · 交互检查模式";view.ReviewMode=true;view.ReviewFast=fast;view.RandomOrder=false;view.ShowStats=true;view.SetTime(0);}
+
  readonly Stopwatch watch=Stopwatch.StartNew();Options opts=Options.Load();SharedView view;bool saver,embedded,full;Point initial;Rect oldBounds;WindowState oldState;
  [DllImport("user32.dll")]static extern IntPtr SetParent(IntPtr a,IntPtr b);
  [DllImport("user32.dll")]static extern int SetWindowLong(IntPtr h,int n,int v);
@@ -29,13 +31,14 @@ sealed class DuetWindow:Window {
  [DllImport("user32.dll")]static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
  [StructLayout(LayoutKind.Sequential)]struct RECT{public int left,top,right,bottom;}
  public DuetWindow():this(true){}
- DuetWindow(bool buildView){Title="Macintosh × Windows · Retro Scenes v3.5.1";Width=1120;Height=730;MinWidth=640;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Brushes.Black;if(buildView)Build();KeyDown+=KeysDown;MouseMove+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5){var p=Forms.Cursor.Position;if(Math.Abs(p.X-initial.X)>8||Math.Abs(p.Y-initial.Y)>8)Close();}};MouseDown+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5)Close();};}
+ DuetWindow(bool buildView){Title="Macintosh × Windows · Retro Scenes v3.6.0";Width=1120;Height=730;MinWidth=640;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Brushes.Black;if(buildView)Build();KeyDown+=KeysDown;MouseMove+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5){var p=Forms.Cursor.Position;if(Math.Abs(p.X-initial.X)>8||Math.Abs(p.Y-initial.Y)>8)Close();}};MouseDown+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5)Close();};}
  void HideSystemCursor(){Cursor=Cursors.None;ForceCursor=true;Loaded+=delegate{Mouse.UpdateCursor();};}
  void Build(){view=new SharedView(opts,saver,embedded);Content=view;}
  public DuetWindow(Drawing.Rectangle bounds):this(false){saver=full=true;HideSystemCursor();WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;WindowStartupLocation=WindowStartupLocation.Manual;Topmost=true;ShowInTaskbar=false;initial=new Point(Forms.Cursor.Position.X,Forms.Cursor.Position.Y);Build();SourceInitialized+=delegate{SetWindowPos(new WindowInteropHelper(this).Handle,new IntPtr(-1),bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0040);};}
  public DuetWindow(Drawing.Rectangle bounds,FrameworkElement sharedContent):this(false){saver=full=true;HideSystemCursor();WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;WindowStartupLocation=WindowStartupLocation.Manual;Topmost=true;ShowInTaskbar=false;initial=new Point(Forms.Cursor.Position.X,Forms.Cursor.Position.Y);Content=sharedContent;SourceInitialized+=delegate{SetWindowPos(new WindowInteropHelper(this).Handle,new IntPtr(-1),bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0040);};}
  public DuetWindow(IntPtr parent):this(false){embedded=true;MinWidth=MinHeight=0;WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;ShowInTaskbar=false;WindowStartupLocation=WindowStartupLocation.Manual;Build();SourceInitialized+=delegate{IntPtr h=new WindowInteropHelper(this).Handle;SetParent(h,parent);SetWindowLong(h,-16,0x50000000);RECT r;if(GetClientRect(parent,out r))SetWindowPos(h,IntPtr.Zero,0,0,r.right-r.left,r.bottom-r.top,0x0044);};}
  void KeysDown(object sender,KeyEventArgs e){if(embedded)return;if(saver||e.Key==Key.Escape){Close();return;}if(e.Key==Key.F11||e.Key==Key.Return){if(!full){oldBounds=new Rect(Left,Top,Width,Height);oldState=WindowState;WindowState=WindowState.Normal;WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;var bounds=Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;SetWindowPos(new WindowInteropHelper(this).Handle,IntPtr.Zero,bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0044);full=true;}else{WindowStyle=WindowStyle.SingleBorderWindow;ResizeMode=ResizeMode.CanResize;Left=oldBounds.Left;Top=oldBounds.Top;Width=oldBounds.Width;Height=oldBounds.Height;WindowState=oldState;full=false;}view.Hint=!full;}
+ if(view.ReviewMode&&(e.Key==Key.PageDown||e.Key==Key.PageUp||e.Key==Key.Home)){view.ReviewStep(e.Key==Key.PageDown?1:e.Key==Key.PageUp?-1:0);e.Handled=true;return;}
  if(e.Key==Key.Space)opts.Palette=(opts.Palette+1)%17;if(e.Key==Key.P){opts.Animate=!opts.Animate;view.RefreshScheduling();}if(e.Key==Key.A)opts.Cinematic=!opts.Cinematic;if(e.Key==Key.F2)view.ShowStats=!view.ShowStats;
  if(e.Key==Key.S){view.Suspend=true;view.RefreshScheduling();try{using(var f=new Settings()){new WindowInteropHelper(this);f.ShowDialog(new DialogOwner(new WindowInteropHelper(this).Handle));}opts=Options.Load();view.Options=opts;}finally{view.Suspend=false;view.RefreshScheduling();}}
  }
@@ -89,9 +92,9 @@ sealed class SharedView:Grid{
  new Shot(0,18,600,400,40,16,1,180,60),
  new Shot(0,19,600,400,40,-16,1,180,60),
  new Shot(0,20,600,400,40,16,1,180,60),
- new Shot(1,14,2800,400,40,16,1,180,60),
+ new Shot(1,14,3750,1940,40,-16,1,180,60),
  new Shot(1,15,2800,400,40,-16,1,180,60),
- new Shot(1,16,2800,400,50,16,1,180,60),
+ new Shot(1,16,2800,400,50,10,.84,100,40),
  new Shot(1,17,2800,400,46,-16,1,180,60),
  new Shot(1,18,2800,400,40,16,1,180,60),
  new Shot(1,19,2800,400,40,-16,1,180,60),
@@ -101,7 +104,11 @@ sealed class SharedView:Grid{
  };
 
  // One scheduler belongs to the shared renderer, so every monitor sees the same random scene.
- public bool RandomOrder=true;readonly Random random=new Random(Guid.NewGuid().GetHashCode());
+ int reviewSerial;public bool ReviewMode,ReviewFast;public bool RandomOrder=true;
+ const double ReviewSeconds=9.6;static readonly int[] ReviewOrder={27,37,28,35,16,33,31,30,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17,18,19,20,21,22,23,24,25,26,29,32,34,36};
+ Shot ReviewAt(double t,out double age){if(ReviewFast){reviewSerial=(int)(Math.Max(0,t)/ReviewSeconds);age=(t%ReviewSeconds)/ReviewSeconds*shots[ReviewOrder[reviewSerial%ReviewOrder.Length]].Duration;return shots[ReviewOrder[reviewSerial%ReviewOrder.Length]];}double cycle=t%Duration;int i=0;while(i<ReviewOrder.Length-1&&cycle>=shots[ReviewOrder[i]].Duration){cycle-=shots[ReviewOrder[i]].Duration;i++;}reviewSerial=(int)(t/Duration)*ReviewOrder.Length+i;age=cycle;return shots[ReviewOrder[i]];}
+ public void ReviewStep(int direction){double age;Shot shot=ReviewAt(motion,out age);if(ReviewFast)motion=Math.Max(0,(reviewSerial+(direction==0?0:direction))*ReviewSeconds);else{motion-=age;if(direction>0)motion+=shot.Duration;else if(direction<0){int previous=(reviewSerial+ReviewOrder.Length-1)%ReviewOrder.Length;motion=Math.Max(0,motion-shots[ReviewOrder[previous]].Duration);}}SetTime(motion);}
+readonly Random random=new Random(Guid.NewGuid().GetHashCode());
  Shot randomShot;double randomStart,randomEnd;bool randomReady;int recent=-1,previousChoice=-1;
  static int ClockIndex(int owner){for(int i=0;i<shots.Length;i++)if(shots[i].Owner==owner&&shots[i].Scene==0)return i;return 0;}
  Shot PickRandom(bool first){int owner=random.Next(2);bool clock=first||random.NextDouble()<.35;int choice;
@@ -119,19 +126,41 @@ sealed class SharedView:Grid{
  public static double StopTime(int oldIndex){int[] scenes={0,1,3,5,6,4,2,2,4,6,5,3,1,0};int owner=oldIndex<7?0:1;for(int i=0;i<shots.Length;i++)if(shots[i].Owner==owner&&shots[i].Scene==scenes[oldIndex])return ShotTime(i)+shots[i].Duration*.5;return 0;}
  public static string RouteInfo(){var text=new System.Text.StringBuilder();for(int i=0;i<shots.Length;i++)text.AppendLine(i+" "+(shots[i].Owner==0?"Mac":"Windows")+" scene="+shots[i].Scene+" t="+ShotTime(i).ToString("F3",CultureInfo.InvariantCulture)+" duration="+shots[i].Duration);text.AppendLine("Loop="+Duration.ToString("F3",CultureInfo.InvariantCulture));return text.ToString();}
 
+ static readonly string[] CalculatorValues={"0","1","19","198","1984"};ReferenceMotion.Sample referenceMotion;readonly Rectangle pressFace=new Rectangle{Fill=Brushes.Black,Opacity=.20,IsHitTestVisible=false};readonly Rectangle pressEdge=new Rectangle{Stroke=Brushes.Black,StrokeThickness=3,Fill=Brushes.Transparent,IsHitTestVisible=false};readonly System.Windows.Shapes.Path referenceSelection=new System.Windows.Shapes.Path{Stroke=Brushes.Black,StrokeThickness=3,IsHitTestVisible=false};readonly Rectangle movingKnob=new Rectangle{Width=35,Height=47,Stroke=Brushes.Black,StrokeThickness=3,IsHitTestVisible=false};
+ readonly System.Windows.Shapes.Path terminalInk=new System.Windows.Shapes.Path{Fill=Brushes.Black,IsHitTestVisible=false};readonly Rectangle terminalCaret=new Rectangle{Fill=Brushes.Black,Width=16,Height=3,IsHitTestVisible=false};int terminalState=-1;Rect selectedCharacter=Rect.Empty;
+ readonly Image pressedControlImage=new Image{Stretch=Stretch.Fill,IsHitTestVisible=false};readonly System.Windows.Shapes.Path paintDrawing=new System.Windows.Shapes.Path{Fill=Brushes.Black,IsHitTestVisible=false};readonly Rectangle paintSelection=new Rectangle{Stroke=Brushes.Black,StrokeThickness=4,IsHitTestVisible=false};int paintShapeStep=-1;
+ readonly Rectangle stateCover=new Rectangle{IsHitTestVisible=false};readonly Image stateImage=new Image{Stretch=Stretch.Fill,IsHitTestVisible=false};readonly Rectangle secondKnob=new Rectangle{Stroke=Brushes.Black,StrokeThickness=3,IsHitTestVisible=false};
  readonly System.Windows.Shapes.Path referenceDynamic=new System.Windows.Shapes.Path{Fill=Brushes.Black,IsHitTestVisible=false};string referenceValue="";
- void UpdateReference(Shot shot,double age){bool calculator=shot.Scene==17;referenceDynamic.Visibility=calculator?Visibility.Visible:Visibility.Hidden;if(!calculator){referenceValue="";return;}
- string[] values={"0","1","19","198","1984","1984","1984","1984","1984"};int phase=Math.Min(values.Length-1,(int)(age/shot.Duration*values.Length));string value=values[phase],key=shot.Owner+":"+value;if(key==referenceValue)return;referenceValue=key;int pitch=shot.Owner==0?6:3;int width=0;foreach(char c in value)width+=(shot.Owner==0?Macintosh.ReferenceFonts.Advance(c):WindowsPixels.Advance(c))*pitch;
+ void UpdateReference(Shot shot,double age){bool calculator=shot.Scene==17;referenceDynamic.Visibility=calculator&&referenceCard.Visibility==Visibility.Visible?Visibility.Visible:Visibility.Hidden;if(!calculator){referenceValue="";return;}
+ string value=CalculatorValues[referenceMotion.Digits],key=shot.Owner+":"+value;if(key==referenceValue)return;referenceValue=key;int pitch=shot.Owner==0?6:3;int width=0;foreach(char c in value)width+=(shot.Owner==0?Macintosh.ReferenceFonts.Advance(c):WindowsPixels.Advance(c))*pitch;
  var geometry=new StreamGeometry();using(var pen=geometry.Open()){int x=shot.Owner*2200+(shot.Owner==0?1086:922)-width;foreach(char c in value){string[] rows=shot.Owner==0?Macintosh.ReferenceFonts.Glyph(c):WindowsPixels.Glyph(c);for(int j=0;j<rows.Length;j++)for(int i=0;i<rows[j].Length;i++)if(rows[j][i]=='1'){double xx=x+i*pitch+.225,yy=214+j*pitch+.225;pen.BeginFigure(new Point(xx,yy),true,true);pen.LineTo(new Point(xx+pitch-.55,yy),true,false);pen.LineTo(new Point(xx+pitch-.55,yy+pitch-.55),true,false);pen.LineTo(new Point(xx,yy+pitch-.55),true,false);}x+=(shot.Owner==0?Macintosh.ReferenceFonts.Advance(c):WindowsPixels.Advance(c))*pitch;}}geometry.Freeze();referenceDynamic.Data=geometry;
  }
- Point CalculatorPointer(Shot shot,double u){int[] keys={0,12,6,5,8,8,8,8,8};double v=Math.Min(8.999,u*9);int index=(int)v;int key=keys[index];double x,y;if(shot.Owner==0){x=209+(key%4)*260;y=334+(key/4)*83;}else{if(index==0)return new Point(2200+895,325);int[] winKeys={0,13,3,2,7,7,7,7,7};int k=winKeys[index];x=303+(k%6)*118;y=409+(k/6)*80;}return new Point(shot.Owner*2200+x,y);}
- void SelectCard(Shot shot,double age){int cardScene=shot.Scene==7&&age<5?11:shot.Scene;if(shot.Scene==12&&age%6>5.72)cardScene=13;int key=shot.Scene>=7?shot.Owner*100+cardScene:-1;if(key==activeCard)return;activeCard=key;bool extra=key>=0;macWorld.Visibility=windowsWorld.Visibility=extra?Visibility.Hidden:Visibility.Visible;referenceCard.Visibility=extra?Visibility.Visible:Visibility.Hidden;
- if(extra){if(shot.Scene==12){ReferenceContent.Image(shot.Owner,12);ReferenceContent.Image(shot.Owner,13);}referenceCard.Source=ReferenceContent.Image(shot.Owner,cardScene);WCanvas.SetLeft(referenceCard,shot.Owner*2200);WCanvas.SetTop(referenceCard,0);}else referenceCard.Source=null;
+ static void Place(Rectangle visual,double x,double y,double w,double h){visual.Width=w;visual.Height=h;WCanvas.SetLeft(visual,x);WCanvas.SetTop(visual,y);}
+ void UpdateReferenceFeedback(Shot shot){
+ bool extra=shot.Scene>=7&&Options.Cinematic&&referenceCard.Visibility==Visibility.Visible;double x=shot.Owner*2200;Rect r=referenceMotion.Button;bool down=extra&&referenceMotion.Down&&!r.IsEmpty;
+ referenceSelection.Visibility=Visibility.Hidden;bool charMap=extra&&shot.Owner==1&&shot.Scene==18&&!referenceMotion.Selection.IsEmpty;if(charMap){referenceSelection.Visibility=Visibility.Visible;referenceSelection.StrokeThickness=1.25;referenceSelection.Opacity=.65;if(selectedCharacter!=referenceMotion.Selection){selectedCharacter=referenceMotion.Selection;var selected=new RectangleGeometry(new Rect(x+selectedCharacter.X+1,selectedCharacter.Y+1,selectedCharacter.Width-2,selectedCharacter.Height-2));selected.Freeze();referenceSelection.Data=selected;}}else selectedCharacter=Rect.Empty;
+ bool macPaint=extra&&shot.Owner==0&&shot.Scene==14;paintSelection.Visibility=macPaint&&referenceMotion.ViewState>=1?Visibility.Visible:Visibility.Hidden;paintDrawing.Visibility=macPaint?Visibility.Visible:Visibility.Hidden;if(macPaint){Place(paintSelection,128,301,61,51);int step=(int)Math.Round(referenceMotion.DrawProgress*100);if(step!=paintShapeStep){paintShapeStep=step;var shape=new StreamGeometry();using(var pen=shape.Open()){var used=new System.Collections.Generic.HashSet<int>();double w=340*step/100.0,h=250*step/100.0;for(int i=0;i<180&&step>0;i++){double angle=i*Math.PI/90;int xx=(int)Math.Round((480+w*.5+Math.Cos(angle)*w*.5)/4)*4,yy=(int)Math.Round((260+h*.5+Math.Sin(angle)*h*.5)/4)*4;if(!used.Add(yy*2000+xx))continue;pen.BeginFigure(new Point(xx+.225,yy+.225),true,true);pen.LineTo(new Point(xx+3.45,yy+.225),true,false);pen.LineTo(new Point(xx+3.45,yy+3.45),true,false);pen.LineTo(new Point(xx+.225,yy+3.45),true,false);}}shape.Freeze();paintDrawing.Data=shape;}}else paintShapeStep=-1;
+ bool calculatorDown=down&&shot.Scene==17;pressFace.Visibility=down?Visibility.Visible:Visibility.Hidden;pressEdge.Visibility=down&&!calculatorDown?Visibility.Visible:Visibility.Hidden;pressedControlImage.Visibility=calculatorDown?Visibility.Visible:Visibility.Hidden;if(down){pressFace.Fill=calculatorDown?windows.Paper:Brushes.Black;pressFace.Opacity=calculatorDown?1:.2;Place(pressFace,x+r.X,r.Y,r.Width,r.Height);Place(pressEdge,x+r.X,r.Y,r.Width,r.Height);}if(calculatorDown){pressedControlImage.Source=ReferenceContent.PressedCalculator(shot.Owner,referenceMotion.PressedKey);pressedControlImage.Width=r.Width;pressedControlImage.Height=r.Height;WCanvas.SetLeft(pressedControlImage,x+r.X);WCanvas.SetTop(pressedControlImage,r.Y);}
+ if(!synchronousCards)ReferenceContent.PrepareInteraction(shot.Owner,shot.Scene);
+ var patch=extra&&ReferenceContent.InteractionStates(shot.Owner,shot.Scene)>0?ReferenceContent.Interaction(shot.Owner,shot.Scene,referenceMotion.ViewState,synchronousCards):null;
+ stateCover.Visibility=stateImage.Visibility=patch!=null?Visibility.Visible:Visibility.Hidden;if(patch!=null){stateCover.Fill=windows.Paper;Place(stateCover,x+patch.Bounds.X,patch.Bounds.Y,patch.Bounds.Width,patch.Bounds.Height);stateImage.Source=patch.Image;stateImage.Width=patch.Bounds.Width;stateImage.Height=patch.Bounds.Height;WCanvas.SetLeft(stateImage,x+patch.Bounds.X);WCanvas.SetTop(stateImage,patch.Bounds.Y);}else stateImage.Source=null;
+ bool slider=extra&&((shot.Owner==1&&shot.Scene==21)||(shot.Owner==0&&shot.Scene==19));bool two=slider&&shot.Owner==0;
+ movingKnob.Visibility=slider?Visibility.Visible:Visibility.Hidden;secondKnob.Visibility=two?Visibility.Visible:Visibility.Hidden;
+ // Slider tracks are drawn without thumbs in the base texture. Only these live thumbs exist.
+
+ if(slider){movingKnob.Fill=secondKnob.Fill=windows.Paper;if(two){Place(movingKnob,x+167,referenceMotion.SliderY,65,32);Place(secondKnob,x+referenceMotion.SliderX,405,42,52);}else Place(movingKnob,x+referenceMotion.SliderX,505,35,47);}
+
+ }
+ static void TerminalLine(StreamGeometryContext pen,string text,double x,double y){foreach(char ch in text){var rows=WindowsPixels.MonoGlyph(ch);for(int r=0;r<rows.Length;r++)for(int c=0;c<rows[r].Length;c++)if(rows[r][c]=='1'){double xx=x+c*2+.225,yy=y+r*2+.225;pen.BeginFigure(new Point(xx,yy),true,true);pen.LineTo(new Point(xx+1.45,yy),true,false);pen.LineTo(new Point(xx+1.45,yy+1.45),true,false);pen.LineTo(new Point(xx,yy+1.45),true,false);}x+=WindowsPixels.MonoAdvance(ch)*2;}}
+ void UpdateTerminal(Shot shot,double age){bool show=shot.Owner==1&&shot.Scene==16&&referenceCard.Visibility==Visibility.Visible;terminalInk.Visibility=show?Visibility.Visible:Visibility.Hidden;terminalCaret.Visibility=show&&age%.9<.5?Visibility.Visible:Visibility.Hidden;if(!show){terminalState=-1;return;}int state=referenceMotion.ViewState;string command=@"C:\>"+"rm -rf /".Substring(0,Math.Min(8,state));if(state!=terminalState){terminalState=state;var geometry=new StreamGeometry();using(var pen=geometry.Open()){TerminalLine(pen,command,2200+76,580);if(state>=9){TerminalLine(pen,"Bad command or file name",2200+76,624);TerminalLine(pen,@"C:\>",2200+76,668);}}geometry.Freeze();terminalInk.Data=geometry;}string caretText=state>=9?@"C:\>":command;double left=2200+76;foreach(char ch in caretText)left+=WindowsPixels.MonoAdvance(ch)*2;WCanvas.SetLeft(terminalCaret,left+2);WCanvas.SetTop(terminalCaret,state>=9?693:605);}
+ bool synchronousCards;
+ void SelectCard(Shot shot,double age){int cardScene=shot.Scene==7&&age<5?11:shot.Scene;if(shot.Scene==12&&age%6>5.72)cardScene=13;int key=shot.Scene>=7&&!(shot.Owner==1&&shot.Scene==14)?shot.Owner*100+cardScene:-1;if(key==activeCard)return;bool extra=key>=0;BitmapSource card=null;if(extra){if(shot.Scene==12){if(synchronousCards){ReferenceContent.Image(shot.Owner,12);ReferenceContent.Image(shot.Owner,13);}else{ReferenceContent.TryImage(shot.Owner,12);ReferenceContent.TryImage(shot.Owner,13);}}card=synchronousCards?ReferenceContent.Image(shot.Owner,cardScene):ReferenceContent.TryImage(shot.Owner,cardScene);if(card==null){macWorld.Visibility=windowsWorld.Visibility=Visibility.Hidden;referenceCard.Visibility=Visibility.Hidden;return;}}activeCard=key;macWorld.Visibility=windowsWorld.Visibility=extra?Visibility.Hidden:Visibility.Visible;referenceCard.Visibility=extra?Visibility.Visible:Visibility.Hidden;
+ if(extra){referenceCard.Source=card;WCanvas.SetLeft(referenceCard,shot.Owner*2200);WCanvas.SetTop(referenceCard,0);}else referenceCard.Source=null;
  }
  public SharedView(Options options,bool saver,bool embedded){Options=options;this.embedded=embedded;Hint=!saver&&!embedded;ClipToBounds=true;Cursor=Cursors.None;
  cornerReveal.GradientStops.Add(new GradientStop(Colors.Transparent,0));cornerReveal.GradientStops.Add(new GradientStop(Colors.Transparent,.68));cornerReveal.GradientStops.Add(new GradientStop(Colors.White,1));
  SyncOptions();var commonPaper=new SolidColorBrush();mac=new Macintosh.FluidView(macOptions,false,false,commonPaper);windows=new FluidView(options,false,false,commonPaper);
- var mw=mac.DetachWorld();var ww=windows.DetachWorld();macWorld=mw;windowsWorld=ww;WCanvas.SetLeft(ww,2200);plane.Children.Add(mw);plane.Children.Add(ww);plane.RenderTransform=camera;plane.HorizontalAlignment=HorizontalAlignment.Left;plane.VerticalAlignment=VerticalAlignment.Top;sceneLayer.Children.Add(plane);Children.Add(sceneLayer);transitionVeil.Fill=windows.Paper;transitionVeil.OpacityMask=reveal;Children.Add(transitionVeil);referenceCard.Visibility=Visibility.Hidden;plane.Children.Add(referenceCard);plane.Children.Add(referenceDynamic);
+ var mw=mac.DetachWorld();var ww=windows.DetachWorld();macWorld=mw;windowsWorld=ww;WCanvas.SetLeft(ww,2200);plane.Children.Add(mw);plane.Children.Add(ww);plane.RenderTransform=camera;plane.HorizontalAlignment=HorizontalAlignment.Left;plane.VerticalAlignment=VerticalAlignment.Top;sceneLayer.Children.Add(plane);Children.Add(sceneLayer);transitionVeil.Fill=windows.Paper;transitionVeil.OpacityMask=reveal;Children.Add(transitionVeil);referenceCard.Visibility=Visibility.Hidden;plane.Children.Add(referenceCard);plane.Children.Add(stateCover);plane.Children.Add(stateImage);plane.Children.Add(referenceDynamic);plane.Children.Add(terminalInk);plane.Children.Add(terminalCaret);plane.Children.Add(paintDrawing);plane.Children.Add(paintSelection);plane.Children.Add(movingKnob);plane.Children.Add(secondKnob);plane.Children.Add(referenceSelection);plane.Children.Add(pressFace);plane.Children.Add(pressEdge);plane.Children.Add(pressedControlImage);
  // A single cursor stays above every window on the common drawing plane.
  mouse=windows.CursorVisual;mouse.RenderTransform=mouseShift;WCanvas.SetZIndex(mouse,1000);plane.Children.Add(mouse);Background=windows.Paper;
  var glow=new RadialGradientBrush{Center=new Point(.42,.3),GradientOrigin=new Point(.42,.3),RadiusX=.78,RadiusY=.95};glow.GradientStops.Add(new GradientStop(Color.FromArgb(29,255,248,221),0));glow.GradientStops.Add(new GradientStop(Colors.Transparent,1));glow.Freeze();Children.Add(new Rectangle{Fill=glow,IsHitTestVisible=false});
@@ -162,7 +191,9 @@ sealed class SharedView:Grid{
  }
  return log.ToString();
  }
- public void SetTime(double t){double dt=Math.Max(0,Math.Min(.25,t-motion));motion=t;Update(t,dt,!initializedMouse); }
+ public Point AuditPointer{get{return new Point(mouseX,mouseY);}}
+ public string AuditState{get{return referenceValue;}}
+ public void SetTime(double t){double dt=Math.Max(0,Math.Min(.25,t-motion));motion=t;synchronousCards=true;try{Update(t,dt,!initializedMouse);}finally{synchronousCards=false;} }
  void Rendering(object sender,EventArgs args){var e=(RenderingEventArgs)args;if(e.RenderingTime==previous)return;previous=e.RenderingTime;double now=watch.Elapsed.TotalSeconds,dt=now-lastReal;
  if(Suspend||Window.GetWindow(this).WindowState==WindowState.Minimized){lastReal=now;return;}
  int target=Options.Animate?Math.Min(refresh,embedded?15:Options.FrameRate):2;if(now<nextFrame-.0005)return;nextFrame+=1.0/Math.Max(1,target);while(nextFrame<=now)nextFrame+=1.0/Math.Max(1,target);lastReal=now;
@@ -173,8 +204,8 @@ sealed class SharedView:Grid{
  void Update(double t,double dt,bool direct){
  if(ActualWidth<=0||ActualHeight<=0)return;
  SyncOptions();windows.Options=Options;
- double age;Shot stop;if(RandomOrder)stop=RandomShotAt(t,out age);else{double cycle=((t%Duration)+Duration)%Duration;int shotIndex=0;age=cycle;while(shotIndex<shots.Length-1&&age>=shots[shotIndex].Duration){age-=shots[shotIndex].Duration;shotIndex++;}stop=shots[shotIndex];}double u=age/stop.Duration;
- bool blank=age<.6||age>stop.Duration-.6;SelectCard(stop,age);UpdateReference(stop,age);
+ double age;Shot stop;if(ReviewMode){stop=ReviewAt(t,out age);}else if(RandomOrder)stop=RandomShotAt(t,out age);else{double cycle=((t%Duration)+Duration)%Duration;int shotIndex=0;age=cycle;while(shotIndex<shots.Length-1&&age>=shots[shotIndex].Duration){age-=shots[shotIndex].Duration;shotIndex++;}stop=shots[shotIndex];}double u=age/stop.Duration;
+ referenceMotion=ReferenceMotion.At(stop.Owner,stop.Scene,age,stop.Duration);bool blank=age<.6||age>stop.Duration-.6;SelectCard(stop,age);UpdateReference(stop,age);UpdateReferenceFeedback(stop);UpdateTerminal(stop,age);
  double revealProgress=age<4.8?(age-.6)/4.2:age>stop.Duration-4.8?(stop.Duration-.6-age)/4.2:1;
  if(blank){sceneLayer.Visibility=Visibility.Hidden;transitionVeil.Visibility=Visibility.Hidden;}
  else{sceneLayer.Visibility=Visibility.Visible;if(revealProgress>=1)transitionVeil.Visibility=Visibility.Hidden;else{transitionVeil.Visibility=Visibility.Visible;double r=Math.Max(0,Math.Min(1,revealProgress));r=r*r*(3-2*r);bool entering=age<4.8;int kind=(stop.Scene*3+stop.Owner*5+(entering?0:2))%7;transitionVeil.Opacity=1;
@@ -184,13 +215,15 @@ sealed class SharedView:Grid{
  var center=new Point(stop.Center.X+stop.Drift.X*1.12*(u-.5),stop.Center.Y+stop.Drift.Y*1.12*(u-.5));
  double zoom=Math.Max(ActualWidth/1120,ActualHeight/720)*stop.Zoom*(.98+.04*u);var m=Matrix.Identity;m.Translate(-center.X,-center.Y);m.Scale(zoom,zoom*.84);m.Skew(-7,0);m.Rotate(stop.Angle+.8*(u-.5));m.Translate(ActualWidth/2,ActualHeight/2);if(!blank&&revealProgress<1&&transitionKind==5){double fade=1-Math.Max(0,revealProgress);m.Translate((age<4.8?-1:1)*ActualWidth*.22*fade,ActualHeight*.08*fade);}camera.Matrix=m;
  var inverse=m;inverse.Invert();Rect visible=Rect.Transform(new Rect(0,0,ActualWidth,ActualHeight),inverse);visible.Inflate(16,16);
- bool native=stop.Scene<7&&!blank;double local=u*24;
- mac.CompositeFrame(t,native&&stop.Owner==0?stop.Scene:-1,local,native?visible:Rect.Empty);
- Rect winVisible=native?visible:Rect.Empty;if(!winVisible.IsEmpty)winVisible.Offset(-2200,0);windows.CompositeFrame(t,native&&stop.Owner==1?stop.Scene:-1,local,winVisible);
- Point target;if(stop.Owner==1&&stop.Scene==15){target=new Point(2200+850,348);}else if(stop.Owner==1&&stop.Scene==18){target=new Point(2200+452,340);}else if(stop.Scene==17){target=CalculatorPointer(stop,u);}else if(stop.Scene>=7){target=stop.Scene==8?new Point(stop.Owner*2200+(stop.Owner==0?820:600),250+u*300):new Point(stop.Owner*2200+700+90*Math.Sin(u*2),590);if(stop.Scene==7||stop.Scene==10)target=new Point(-500,-500);}else{target=stop.Owner==0?mac.CursorPosition:windows.CursorPosition;if(stop.Owner==1)target.X+=2200;}
+ bool paintAgain=stop.Owner==1&&stop.Scene==14;bool native=(stop.Scene<7||paintAgain)&&!blank;double local=u*24;
+ double actorTime=synchronousCards?t:ReviewMode?reviewSerial*80+age:double.NaN;
+ mac.CompositeFrame(t,native&&stop.Owner==0?stop.Scene:-1,local,native?visible:Rect.Empty,actorTime);
+ Rect winVisible=native?visible:Rect.Empty;if(!winVisible.IsEmpty)winVisible.Offset(-2200,0);windows.CompositeFrame(t,native&&stop.Owner==1?(paintAgain?5:stop.Scene):-1,local,winVisible,actorTime);
+ Point target;if(stop.Scene>=7&&!paintAgain){target=referenceMotion.Pointer;target.X+=stop.Owner*2200;}else{target=stop.Owner==0?mac.CursorPosition:windows.CursorPosition;if(stop.Owner==1)target.X+=2200;}
  if(mouseOwner!=stop.Owner){mouseHandoff=false;mouseOwner=stop.Owner;mouseX=target.X;mouseY=target.Y;}
  if(!initializedMouse||direct){mouseX=target.X;mouseY=target.Y;initializedMouse=true;}else if(mouseHandoff){double dx=target.X-mouseX,dy=target.Y-mouseY,length=Math.Sqrt(dx*dx+dy*dy),step=260*dt;if(length<=step){mouseX=target.X;mouseY=target.Y;mouseHandoff=false;}else{mouseX+=dx*step/length;mouseY+=dy*step/length;}}else{mouseX=target.X;mouseY=target.Y;}
- mouseShift.X=mouseX;mouseShift.Y=mouseY;mouse.Visibility=Options.Cinematic&&stop.Scene!=7&&stop.Scene!=10?Visibility.Visible:Visibility.Collapsed;
+ mouseShift.X=mouseX;mouseShift.Y=mouseY;mouse.Visibility=Options.Cinematic&&referenceMotion.Show&&stop.Scene!=7&&stop.Scene!=10&&(stop.Scene<7||paintAgain||referenceCard.Visibility==Visibility.Visible)?Visibility.Visible:Visibility.Collapsed;
+ if(ReviewMode)hint.Text="检查版 · "+(ReviewFast?"8秒/场景":"常规节奏")+" · "+(stop.Owner==0?"Mac":"Windows")+" scene "+stop.Scene+" · PgDn 下一场 / PgUp 上一场 / Home 重播 / P 暂停";
  hint.Visibility=Hint?Visibility.Visible:Visibility.Collapsed;stats.Visibility=ShowStats?Visibility.Visible:Visibility.Collapsed;
  }
 }

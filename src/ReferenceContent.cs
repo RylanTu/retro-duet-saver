@@ -2,16 +2,18 @@ using System;using System.Collections.Generic;using System.Drawing;using System.
 using Brush=System.Drawing.Brush;
 namespace RetroWindows {
 static partial class ReferenceContent {
+ static readonly object cacheGate=new object();static readonly HashSet<int> pending=new HashSet<int>();
+ public static BitmapSource TryImage(int owner,int scene){int key=owner*100+scene;lock(cacheGate){BitmapSource image;if(cache.TryGetValue(key,out image))return image;if(pending.Add(key))System.Threading.ThreadPool.QueueUserWorkItem(delegate{try{Image(owner,scene);}finally{lock(cacheGate)pending.Remove(key);}});return null;}}
  static readonly Dictionary<int,BitmapSource> cache=new Dictionary<int,BitmapSource>();static readonly Queue<int> order=new Queue<int>();
- public static BitmapSource Image(int owner,int scene){int key=owner*100+scene;BitmapSource value;if(cache.TryGetValue(key,out value))return value;
- using(var art=new Painter(owner==0))using(var bitmap=new Bitmap(2400,1600,System.Drawing.Imaging.PixelFormat.Format32bppPArgb)){using(var g=Graphics.FromImage(bitmap)){g.Clear(System.Drawing.Color.White);g.ScaleTransform(2,2);art.Draw(g,scene);}
+ public static BitmapSource Image(int owner,int scene){int key=owner*100+scene;BitmapSource value;lock(cacheGate){if(cache.TryGetValue(key,out value))return value;}
+ using(var art=new Painter(owner==0){LiveSliders=(owner==0&&scene==19)||(owner==1&&scene==21)})using(var bitmap=new Bitmap(2400,1600,System.Drawing.Imaging.PixelFormat.Format32bppPArgb)){using(var g=Graphics.FromImage(bitmap)){g.Clear(System.Drawing.Color.White);g.ScaleTransform(2,2);art.Draw(g,scene);}
  var data=bitmap.LockBits(new Rectangle(0,0,bitmap.Width,bitmap.Height),ImageLockMode.ReadOnly,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
  try{var raw=new byte[data.Stride*bitmap.Height];Marshal.Copy(data.Scan0,raw,0,raw.Length);for(int i=0;i<raw.Length;i+=4){byte a=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=0;raw[i+3]=a;}value=BitmapSource.Create(bitmap.Width,bitmap.Height,192,192,PixelFormats.Pbgra32,null,raw,data.Stride);value.Freeze();value=Macintosh.FluidView.BakeInk(value);}finally{bitmap.UnlockBits(data);}}
  // A bounded two-card cache avoids retaining a second full desktop for every new scene.
- while(order.Count>=2)cache.Remove(order.Dequeue());cache[key]=value;order.Enqueue(key);return value;
+ lock(cacheGate){BitmapSource existing;if(cache.TryGetValue(key,out existing))return existing;while(order.Count>=2)cache.Remove(order.Dequeue());cache[key]=value;order.Enqueue(key);}return value;
  }
  sealed partial class Painter:IDisposable {
- readonly bool mac;readonly SolidBrush black=new SolidBrush(System.Drawing.Color.Black),paper=new SolidBrush(System.Drawing.Color.White),gray=new SolidBrush(System.Drawing.Color.FromArgb(145,145,145)),light=new SolidBrush(System.Drawing.Color.FromArgb(215,215,215)),rim=new SolidBrush(System.Drawing.Color.FromArgb(65,255,255,255)),shadow=new SolidBrush(System.Drawing.Color.FromArgb(40,0,0,0));
+ public int State;public bool LiveSliders;readonly bool mac;readonly SolidBrush black=new SolidBrush(System.Drawing.Color.Black),paper=new SolidBrush(System.Drawing.Color.White),gray=new SolidBrush(System.Drawing.Color.FromArgb(145,145,145)),light=new SolidBrush(System.Drawing.Color.FromArgb(215,215,215)),rim=new SolidBrush(System.Drawing.Color.FromArgb(65,255,255,255)),shadow=new SolidBrush(System.Drawing.Color.FromArgb(40,0,0,0));
  public Painter(bool mac){this.mac=mac;}
  void Fill(Graphics g,Brush b,float x,float y,float w,float h){g.FillRectangle(b,x,y,w,h);}
  void Cell(Graphics g,int x,int y,int p,Brush b){if(b==paper){Fill(g,b,x,y,p,p);return;}Fill(g,shadow,x+1,y+1.5f,p-.3f,p-.3f);Fill(g,b,x+.225f,y+.225f,p-.55f,p-.55f);Fill(g,rim,x+.225f,y+.225f,p-.55f,.35f);Fill(g,rim,x+.225f,y+.575f,.25f,p-.9f);}
@@ -82,15 +84,15 @@ static partial class ReferenceContent {
  void Gallery(Graphics g){Frame(g,mac?"Scrapbook":"Desktop",mac?"File    Edit":"File    Edit    View    Help");
  string[][] icons=mac?new[]{Happy,Floppy,Folder,File,Heart,Clock,Mouse,BrushIcon,Printer,Keyboard}:new[]{Computer,WinIcon(1),Drive,WinIcon(3),Bin,WinIcon(5),WinIcon(6),WinIcon(7),WinIcon(8),WinIcon(9),WinIcon(10),WinIcon(11)};
  string[] names=mac?new[]{"Macintosh","Disk","Folder","Document","Favorites","Clock","Mouse","MacPaint","Printer","Keyboard"}:new[]{"My Computer","Floppy (A:)","Local Disk (C:)","My Documents","Recycle Bin","Date / Time","Control Panel","Paint","Printers","Keyboard","Internet\nExplorer","Readme.txt"};
- for(int i=0;i<icons.Length;i++){int cx=198+(i%4)*268,top=210+(i/4)*166;string[] icon=icons[i];int pitch=mac?5:4;int widest=0;foreach(string row in icon)widest=Math.Max(widest,row.Length);int x=cx-widest*pitch/2,y=top+(94-icon.Length*pitch)/2;Sprite(g,icon,x,y,pitch,black);Caption(g,names[i],cx,top+108,mac?3:2);}
+ for(int i=0;i<icons.Length;i++){int cx=198+(i%4)*268,top=210+(i/4)*166;string[] icon=icons[i];int pitch=mac?5:4;int widest=0;foreach(string row in icon)widest=Math.Max(widest,row.Length);int x=cx-widest*pitch/2,y=top+(94-icon.Length*pitch)/2;Sprite(g,icon,x,y,pitch,black);if((State==1&&i==0)||(State>=2&&i==5)){int pitchText=mac?3:2,tw=Width(names[i],pitchText,false);Fill(g,black,cx-tw/2-5,top+105,tw+10,34);Text(g,names[i],cx-tw/2,top+108,pitchText,false,paper);}else Caption(g,names[i],cx,top+108,mac?3:2);}
  // Explorer's status line gives the icon field a defined lower edge.
  if(!mac){Line(g,53,715,1094,gray);Text(g,icons.Length+" object(s)",70,722,1,false,black);}
  }
- public void Draw(Graphics g,int scene){Desktop(g);if(DrawExtended(g,scene))return;if(scene==12||scene==13){Assistant(g,scene==13);return;}
+ public void Draw(Graphics g,int scene){Desktop(g);if(!mac&&scene==19&&State>=1){ControlOverview(g);WinMouseButtons(g);return;}if(DrawExtended(g,scene))return;if(scene==12||scene==13){Assistant(g,scene==13);return;}
  if(scene==7||scene==11){if(mac){Fill(g,paper,520,285,160,160);if(scene==11){Sprite(g,Floppy,522,285,12,black);Fill(g,paper,560,340,80,66);Text(g,"?",578,340,6,false,black);}else Sprite(g,Happy,520,285,10,black);}else if(scene==11){Fill(g,paper,180,330,840,100);Center(g,"Starting MS-DOS...",350,4,true);}else{Flag(g,490,285,13);Fill(g,paper,230,460,740,70);Center(g,"Starting Windows 95...",470,3,true);}return;}
  if(scene==10){Frame(g,"Welcome to Macintosh","File    Edit    View    Special");Sprite(g,Happy,520,245,10,black);Center(g,"Welcome to Macintosh.",485,5,false);Center(g,"January 24, 1984",585,3,false);return;}
  if(scene==8){Frame(g,mac?"Untitled - SimpleText":"Document - WordPad",mac?"File    Edit    Search    Font    Style":"File    Edit    View    Insert    Format    Help");
- if(mac){Text(g,"DON'T PANIC",100,300,8,false,black);Text(g,"The answer is 42.",100,455,4,false,black);Box(g,735,183,300,390,false);string[] sizes={"9 Point","10 Point","12 Point","14 Point","18 Point","24 Point","36 Point"};for(int i=0;i<sizes.Length;i++)Text(g,sizes[i],765,203+i*49,4,false,black);}
+ if(mac){Text(g,"DON'T PANIC",100,300,State==1?6:State>=2?10:8,false,black);Text(g,"The answer is 42.",100,455,4,false,black);Box(g,735,183,300,390,false);string[] sizes={"9 Point","10 Point","12 Point","14 Point","18 Point","24 Point","36 Point"};for(int i=0;i<sizes.Length;i++){bool selected=State==1&&i==4||State>=2&&i==6;if(selected)Fill(g,black,742,198+i*49,287,49);Text(g,sizes[i],765,203+i*49,4,false,selected?paper:black);}}
  else{Box(g,70,192,420,57,true);Text(g,"MS Sans Serif",85,204,3,false,black);Box(g,515,192,180,57,true);Text(g,"18",533,204,3,false,black);Text(g,"Windows 95",100,325,4,true,black);Text(g,"Passion for a better world",100,480,3,true,black);Box(g,515,249,180,345,false);int[] sizes={8,9,10,11,12,14,18,24};for(int i=0;i<sizes.Length;i++)Text(g,sizes[i].ToString(),544,258+i*40,3,false,black);}
  for(int i=0;i<20;i++){int x=82+i*52;Fill(g,black,x,678,3,i%5==0?30:15);}return;}
  if(scene==9){Gallery(g);return;}

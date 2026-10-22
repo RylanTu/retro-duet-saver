@@ -13,3 +13,4 @@ obj/
 *.ogg
 *.wav
 settings.xml
+local-review/

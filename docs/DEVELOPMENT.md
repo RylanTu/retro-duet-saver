@@ -2,7 +2,7 @@
 
 ## 构建
 
-在 Windows x64 的 PowerShell 中运行根目录 build.ps1。脚本调用 %WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe，以 RetroWindows.DuetApp 为入口编译 src/*.cs，并生成对应 .scr 和 ZIP。没有 NuGet 依赖。修改版本可使用 -Version 3.5.1 参数。
+在 Windows x64 的 PowerShell 中运行根目录 build.ps1。脚本调用 %WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe，以 RetroWindows.DuetApp 为入口编译 src/*.cs，并生成对应 .scr 和 ZIP。没有 NuGet 依赖。修改版本可使用 -Version 3.6.0 参数。
 
 源码包含两个早期独立入口，合并版应始终使用 RetroWindows.DuetApp。不要直接使用最新语言语法，系统 .NET Framework 编译器不支持现代 C# 的全部功能。
 
@@ -19,6 +19,8 @@
 | --new-scenes | 新增 Mac 场景 |
 | --windows-review | 新增 Windows 场景 |
 | --scifi | 科幻文本场景 |
+| --review | 8 秒一场的快速交互检查 |
+| --review-normal | 正常时长交互检查 |
 | --route <file> | 输出固定场景列表与时间 |
 | --render <file.png> <time> [--warm] | 离线静帧 |
 | --frames <directory> <from> <to> [fps] | 离线 PNG 序列 |
@@ -32,6 +34,8 @@
 - MacApp.cs / MacFluidApp.cs：Mac 设置、场景及演出。
 - WinApp.cs / WinFluidApp.cs：Windows 设置、场景及演出。
 - ReferenceScenes.cs / WindowsScenes.cs / ReferenceContent.cs：静态场景绘制与缓存。
+- ReferenceMotion.cs：鼠标轨迹、点击/松开与控件状态共用的确定性时间线。
+- InteractionContent.cs：当前场景交互状态预载与缓存。
 - MacReferenceFonts.cs / WinWindowsPixels.cs：像素字形。
 
 ## 发布
