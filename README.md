@@ -25,6 +25,7 @@
 - 场景内持续漫游，场景间采用多种消散、留白和浮现过渡。
 - 自动鼠标拖动滑块、拖拽窗口、点击、绘图及逐字输入。界面是代码绘制的动画场景，不是可使用的桌面或模拟器。
 - Windows 场景参考真实的 Paint、WordPad、Word / Clippy、Minesweeper、Calculator、MS-DOS Prompt、Character Map 及属性对话框。
+- 两个系统的计算器都输入并停留在 **1984**，作为致敬。
 - 两个系统的签名：**By RylanTu / Passion for a better world**。
 - 编辑器中藏着 DON'T PANIC、42、DO NOT ANSWER，以及 Across the Great Wall, we can reach every corner in the world.
 
