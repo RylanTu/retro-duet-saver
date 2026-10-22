@@ -1,0 +1,22 @@
+name: 问题反馈
+description: 显示、演出、性能或多屏兼容问题
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 现象与复现步骤
+      description: 写明发生在哪个场景、预期表现和实际表现，可附截图。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: Windows 版本、程序版本、GPU、屏幕数量、每屏分辨率/缩放/刷新率、目标 FPS。
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 是否仅特定场景、多屏或全屏出现；可附 F2 指标截图。

@@ -1,0 +1,15 @@
+dist/
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.log
+*.tmp
+*.exe
+*.scr
+*.zip
+*.mp4
+*.ogg
+*.wav
+settings.xml
