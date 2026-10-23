@@ -27,7 +27,7 @@ sealed class DuetWindow:Window {
  readonly Stopwatch watch=Stopwatch.StartNew();Options opts=Options.Load();SharedView view;bool saver,full;Point initial;Rect oldBounds;WindowState oldState;
  [DllImport("user32.dll")]static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int hgt,uint flags);
  public DuetWindow():this(true){}
- DuetWindow(bool buildView){Title="Macintosh × Windows · Retro Scenes v3.6.2";Width=1120;Height=730;MinWidth=640;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Brushes.Black;if(buildView)Build();KeyDown+=KeysDown;MouseMove+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5){var p=Forms.Cursor.Position;if(Math.Abs(p.X-initial.X)>8||Math.Abs(p.Y-initial.Y)>8)Close();}};MouseDown+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5)Close();};}
+ DuetWindow(bool buildView){Title="Macintosh × Windows · Retro Scenes v3.6.3";Width=1120;Height=730;MinWidth=640;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Brushes.Black;if(buildView)Build();KeyDown+=KeysDown;MouseMove+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5){var p=Forms.Cursor.Position;if(Math.Abs(p.X-initial.X)>8||Math.Abs(p.Y-initial.Y)>8)Close();}};MouseDown+=delegate{if(saver&&watch.Elapsed.TotalSeconds>1.5)Close();};}
  void HideSystemCursor(){Cursor=Cursors.None;ForceCursor=true;Loaded+=delegate{Mouse.UpdateCursor();};}
  void Build(){view=new SharedView(opts,saver,false);Content=view;}
  public DuetWindow(Drawing.Rectangle bounds):this(false){saver=full=true;HideSystemCursor();WindowStyle=WindowStyle.None;ResizeMode=ResizeMode.NoResize;WindowStartupLocation=WindowStartupLocation.Manual;Topmost=true;ShowInTaskbar=false;initial=new Point(Forms.Cursor.Position.X,Forms.Cursor.Position.Y);Build();SourceInitialized+=delegate{SetWindowPos(new WindowInteropHelper(this).Handle,new IntPtr(-1),bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0040);};}
@@ -50,7 +50,7 @@ sealed class SharedView:Grid{
  readonly TextBlock hint=new TextBlock(),stats=new TextBlock();
  readonly Stopwatch watch=Stopwatch.StartNew();double motion,lastReal,nextFrame,lastStats,mouseX,mouseY;int frames;bool initializedMouse,precise,mouseHandoff;int mouseOwner=-1;
  readonly System.Windows.Threading.DispatcherTimer idleTimer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};Window hostWindow;bool renderHooked;
- int refresh=60;readonly bool embedded;TimeSpan previous=TimeSpan.MinValue;
+ int refresh=60;readonly bool embedded;TimeSpan previous=TimeSpan.MinValue;double cadenceClock=-1,cadenceCredit=1;
  [DllImport("winmm.dll")]static extern uint timeBeginPeriod(uint value);
  [DllImport("winmm.dll")]static extern uint timeEndPeriod(uint value);
  [DllImport("gdi32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateDC(string driver,string device,string output,IntPtr data);
@@ -165,7 +165,7 @@ readonly Random random=new Random(Guid.NewGuid().GetHashCode());
  void HostStateChanged(object sender,EventArgs e){RefreshScheduling();}
  void IdleTick(object sender,EventArgs e){if(!Suspend)Update(motion,0,false);}
  public void RefreshScheduling(){if(!IsLoaded)return;bool minimized=hostWindow!=null&&hostWindow.WindowState==WindowState.Minimized;bool running=Options.Animate&&!Suspend&&!minimized;
- if(running&&!renderHooked){CompositionTarget.Rendering+=Rendering;renderHooked=true;lastReal=watch.Elapsed.TotalSeconds;nextFrame=lastReal;}
+ if(running&&!renderHooked){CompositionTarget.Rendering+=Rendering;renderHooked=true;lastReal=watch.Elapsed.TotalSeconds;nextFrame=lastReal;cadenceClock=-1;cadenceCredit=1;}
  if(!running&&renderHooked){CompositionTarget.Rendering-=Rendering;renderHooked=false;}
  if(running&&!precise)precise=timeBeginPeriod(1)==0;else if(!running&&precise){timeEndPeriod(1);precise=false;}
  if(!running&&!Suspend&&!minimized)idleTimer.Start();else idleTimer.Stop();
@@ -189,14 +189,19 @@ readonly Random random=new Random(Guid.NewGuid().GetHashCode());
  public void SetTime(double t){double dt=Math.Max(0,Math.Min(.25,t-motion));motion=t;synchronousCards=true;try{Update(t,dt,!initializedMouse);}finally{synchronousCards=false;} }
  void Rendering(object sender,EventArgs args){var e=(RenderingEventArgs)args;if(e.RenderingTime==previous)return;previous=e.RenderingTime;double now=watch.Elapsed.TotalSeconds,dt=now-lastReal;
  if(Suspend||(hostWindow!=null&&hostWindow.WindowState==WindowState.Minimized)){lastReal=now;return;}
- int target=Options.Animate?Math.Min(refresh,embedded?15:Options.FrameRate):2;if(now<nextFrame-.0005)return;nextFrame+=1.0/Math.Max(1,target);while(nextFrame<=now)nextFrame+=1.0/Math.Max(1,target);lastReal=now;
+ int target=Options.Animate?Math.Min(refresh,embedded?15:Options.FrameRate):2;double renderClock=now;if(cadenceClock<0||renderClock<cadenceClock){cadenceClock=renderClock;cadenceCredit=1;}cadenceCredit+=Math.Max(0,renderClock-cadenceClock)*Math.Max(1,target);cadenceClock=renderClock;if(cadenceCredit<.999)return;cadenceCredit=Math.Min(1,Math.Max(0,cadenceCredit-1));lastReal=now;
  if(Options.Animate)motion+=Math.Min(dt,.25)*Options.Speed/100.0*1.2;long updateStart=Stopwatch.GetTimestamp();Update(motion,Math.Min(dt,.25),false);double cost=(Stopwatch.GetTimestamp()-updateStart)*1000.0/Stopwatch.Frequency;frames++;
  if(ProfilePath!=null&&now>=2){var proc=Process.GetCurrentProcess();if(profilePrevious<0)profileStartCpu=proc.TotalProcessorTime.TotalMilliseconds;else{profileIntervals.Add((now-profilePrevious)*1000);profileCosts.Add(cost);}profilePrevious=now;if(now>=12&&profileCosts.Count>0){profileIntervals.Sort();double cpu=proc.TotalProcessorTime.TotalMilliseconds-profileStartCpu,total=0,sum=0;foreach(double n in profileIntervals)total+=n;foreach(double n in profileCosts)sum+=n;proc.Refresh();File.WriteAllText(ProfilePath,string.Format(CultureInfo.InvariantCulture,"UI_fps={0:F2}\nUpdate_ms={1:F4}\nP95_interval_ms={2:F3}\nProcess_cpu_ms_per_s={3:F2}\nWorking_MB={4:F1}\nPrivate_MB={5:F1}\nTier={6}\nDisplay_Hz={7}\nSamples={8}\nUI callbacks, not GPU presentation timestamps.\n",profileIntervals.Count*1000/total,sum/profileCosts.Count,profileIntervals[(int)(profileIntervals.Count*.95)],cpu/10,proc.WorkingSet64/1048576.0,proc.PrivateMemorySize64/1048576.0,RenderCapability.Tier>>16,refresh,profileCosts.Count));ProfilePath=null;Window.GetWindow(this).Close();return;}}
  if(now-lastStats>=1){if(ShowStats)stats.Text=string.Format(CultureInfo.InvariantCulture,"{0:F0} fps | Mac × Windows | one camera",frames/(now-lastStats));lastStats=now;frames=0;}
  }
+ // Quintic easing has zero endpoint velocity and acceleration. Extra slide
+ // displacement therefore joins the underlying camera without a speed jump.
+ static double CameraEase(double value){double u=Math.Max(0,Math.Min(1,value));return u*u*u*(u*(u*6-15)+10);}
+ // Keep a slow drift during transitions, then gently accelerate through the shot.
+ static double CameraTravel(double value){double u=Math.Max(0,Math.Min(1,value));return .4*u+.6*CameraEase(u);}
  static double CameraScale(Shot shot,double progress){
  // Distinct shot sizes: slow approach, retreat and close detail. No zoom reset at a wipe.
- double u=Math.Max(0,Math.Min(1,progress)),curve=u*u*(3-2*u),a,b;
+ double u=Math.Max(0,Math.Min(1,progress)),curve=CameraEase(u),a,b;
  switch(shot.Scene){case 7:a=.92;b=1.12;break;case 0:a=1.04;b=1.48;break;case 1:a=1.30;b=1.08;break;case 2:a=1.03;b=1.34;break;case 8:a=1.08;b=1.40;break;case 19:a=1.08;b=1.50;break;case 14:a=1.06;b=1.33;break;default:int kind=(shot.Scene+shot.Owner*3)%3;a=kind==0?1.30:1.02;b=kind==0?1.05:kind==1?1.28:1.12;break;}
  return a+(b-a)*curve;
  }
@@ -211,8 +216,8 @@ readonly Random random=new Random(Guid.NewGuid().GetHashCode());
  if(kind==5){transitionVeil.OpacityMask=null;transitionVeil.Opacity=1-r;}
  else if(kind==6){transitionVeil.OpacityMask=cornerReveal;cornerReveal.Center=cornerReveal.GradientOrigin=new Point(entering?.12:.88,entering?.85:.15);double radius=.001+2.2*r;cornerReveal.RadiusX=cornerReveal.RadiusY=radius;}
  else{transitionVeil.OpacityMask=reveal;double edge=-.2+1.4*r;Point a,b;if(kind==0){a=new Point(edge-.18,edge-.18);b=new Point(edge+.18,edge+.18);}else if(kind==1){a=new Point(1-edge+.18,edge-.18);b=new Point(1-edge-.18,edge+.18);}else if(kind==2){a=new Point(edge-.18,.5);b=new Point(edge+.18,.5);}else if(kind==3){a=new Point(.5,1-edge+.18);b=new Point(.5,1-edge-.18);}else if(kind==7){a=new Point(1-edge+.18,.5);b=new Point(1-edge-.18,.5);}else if(kind==8){a=new Point(.5,1-edge+.18);b=new Point(.5,1-edge-.18);}else{a=new Point(1-edge+.18,1-edge+.18);b=new Point(1-edge-.18,1-edge-.18);}reveal.StartPoint=a;reveal.EndPoint=b;}transitionKind=kind;}}
- var center=new Point(stop.Center.X+stop.Drift.X*1.12*(u-.5),stop.Center.Y+stop.Drift.Y*1.12*(u-.5));
- double zoom=Math.Max(ActualWidth/1120,ActualHeight/720)*stop.Zoom*CameraScale(stop,u);var m=Matrix.Identity;m.Translate(-center.X,-center.Y);m.Scale(zoom,zoom*.84);m.Skew(-7,0);m.Rotate(stop.Angle+.8*(u-.5));m.Translate(ActualWidth/2,ActualHeight/2);if(!blank&&revealProgress<1&&transitionKind==5){double fade=1-Math.Max(0,revealProgress);var direction=m.Transform(new Vector(-stop.Drift.X,-stop.Drift.Y));if(direction.Length>.001){direction.Normalize();double distance=ActualWidth*.22*fade*(age<4.8?-1:1);m.Translate(direction.X*distance,direction.Y*distance);}}camera.Matrix=m;
+ double travel=CameraTravel(u);var center=new Point(stop.Center.X+stop.Drift.X*1.12*(travel-.5),stop.Center.Y+stop.Drift.Y*1.12*(travel-.5));
+ double zoom=Math.Max(ActualWidth/1120,ActualHeight/720)*stop.Zoom*CameraScale(stop,u);var m=Matrix.Identity;m.Translate(-center.X,-center.Y);m.Scale(zoom,zoom*.84);m.Skew(-7,0);m.Rotate(stop.Angle+.8*(travel-.5));m.Translate(ActualWidth/2,ActualHeight/2);if(!blank&&revealProgress<1&&transitionKind==5){double fade=1-CameraEase(revealProgress);var direction=m.Transform(new Vector(-stop.Drift.X,-stop.Drift.Y));if(direction.Length>.001){direction.Normalize();double distance=ActualWidth*.16*fade*(age<4.8?-1:1);m.Translate(direction.X*distance,direction.Y*distance);}}camera.Matrix=m;
  var inverse=m;inverse.Invert();Rect visible=Rect.Transform(new Rect(0,0,ActualWidth,ActualHeight),inverse);visible.Inflate(16,16);
  bool paintAgain=stop.Owner==1&&stop.Scene==14;bool native=(stop.Scene<7||paintAgain)&&!blank;double local=u*24;
  double actorTime=synchronousCards?t:ReviewMode?reviewSerial*80+age:double.NaN;
