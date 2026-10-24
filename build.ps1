@@ -1,4 +1,4 @@
-param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.3')
+param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.4')
 $ErrorActionPreference = 'Stop'
 $rootDir = $PSScriptRoot
 $distDir = Join-Path $rootDir 'dist'
@@ -9,7 +9,7 @@ if (!(Test-Path -LiteralPath $compilerPath)) { throw 'Windows x64 .NET Framework
 New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
 $exePath = Join-Path $packageDir 'RetroDuetSaver.exe'
 $compileArgs = @('/nologo','/target:winexe','/optimize+','/platform:anycpu','/main:RetroWindows.DuetApp', "/out:$exePath")
-$refs = @('System.Drawing.dll','System.Windows.Forms.dll','System.Xml.dll','System.Core.dll',(Join-Path $frameworkDir 'WPF\WindowsBase.dll'),(Join-Path $frameworkDir 'WPF\PresentationCore.dll'),(Join-Path $frameworkDir 'WPF\PresentationFramework.dll'),(Join-Path $frameworkDir 'System.Xaml.dll'))
+$refs = @('System.Drawing.dll','System.Windows.Forms.dll','System.Xml.dll','System.Core.dll','System.Web.Extensions.dll',(Join-Path $frameworkDir 'WPF\WindowsBase.dll'),(Join-Path $frameworkDir 'WPF\PresentationCore.dll'),(Join-Path $frameworkDir 'WPF\PresentationFramework.dll'),(Join-Path $frameworkDir 'System.Xaml.dll'))
 foreach ($refPath in $refs) { $compileArgs += "/reference:$refPath" }
 foreach ($sourceFile in Get-ChildItem -LiteralPath (Join-Path $rootDir 'src') -Filter '*.cs') { $compileArgs += $sourceFile.FullName }
 & $compilerPath @compileArgs
