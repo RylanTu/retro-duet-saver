@@ -1,4 +1,4 @@
-param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.4')
+param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.5')
 $ErrorActionPreference = 'Stop'
 $rootDir = $PSScriptRoot
 $distDir = Join-Path $rootDir 'dist'

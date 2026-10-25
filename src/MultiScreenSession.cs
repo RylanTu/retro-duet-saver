@@ -35,7 +35,7 @@ sealed class MultiScreenSession:IDisposable {
  topologyTimer.Tick+=RebuildAfterChange;
  SystemEvents.DisplaySettingsChanged+=DisplayChanged;
  }
- public void Show(){Rebuild();if(lighting==null)lighting=new GoveeLanLighting(delegate{return source.AmbientColor;});inputClock.Restart();inputTimer.Tick+=CheckInput;inputTimer.Start();}
+ public void Show(){Rebuild();if(options.GoveeLighting&&lighting==null)lighting=new GoveeLanLighting(delegate{return source.AmbientColor;},options.GoveeSaturation);inputClock.Restart();inputTimer.Tick+=CheckInput;inputTimer.Start();}
  void CheckInput(object sender,EventArgs e){if(disposed||closing||rebuilding)return;var info=new LASTINPUTINFO{Size=(uint)Marshal.SizeOf(typeof(LASTINPUTINFO))};GetLastInputInfo(ref info);var cursor=Forms.Cursor.Position;if(inputState.Update(inputClock.Elapsed.TotalSeconds,new Point(cursor.X,cursor.Y),info.Time)){if(windows.Count>0)windows[0].Close();}}
  void DisplayChanged(object sender,EventArgs e){
  if(disposed||closing)return;

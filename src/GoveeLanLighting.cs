@@ -21,6 +21,7 @@ namespace RetroWindows {
   readonly Thread worker;
   readonly DispatcherTimer sampler;
   readonly Func<Color> readColor;
+  readonly double saturation;
   readonly HashSet<string> allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
   volatile bool stopping;
   int targetRgb, disposed;
@@ -31,8 +32,9 @@ namespace RetroWindows {
   const string FullBrightness = "{\"msg\":{\"cmd\":\"brightness\",\"data\":{\"value\":100}}}";
   const string White = "{\"msg\":{\"cmd\":\"colorwc\",\"data\":{\"color\":{\"r\":255,\"g\":255,\"b\":255},\"colorTemInKelvin\":5400}}}";
 
-  public GoveeLanLighting(Func<Color> colorSource) {
+  public GoveeLanLighting(Func<Color> colorSource, int saturationPercent) {
    readColor = colorSource;
+   saturation = Math.Max(0, Math.Min(300, saturationPercent)) / 100.0;
    string filter = Environment.GetEnvironmentVariable("RETRO_DUET_GOVEE_IPS");
    if (!string.IsNullOrWhiteSpace(filter)) foreach (string ip in filter.Split(new[]{',',';',' '}, StringSplitOptions.RemoveEmptyEntries)) allowed.Add(ip.Trim());
    Sample(null, EventArgs.Empty);
@@ -47,8 +49,19 @@ namespace RetroWindows {
 
   void Sample(object sender, EventArgs args) {
    if (lifetime.Elapsed.TotalSeconds >= LimitSeconds) { if (sampler != null) sampler.Stop(); return; }
-   Color c = readColor();
+   Color c = DeepenColor(readColor());
    Interlocked.Exchange(ref targetRgb, (c.R << 16) | (c.G << 8) | c.B);
+  }
+  // Stretch RGB chroma around its peak: preserve hue and peak brightness while
+  // removing more of the gray/white component. Neutral colors remain neutral.
+  Color DeepenColor(Color color) {
+   double peak = Math.Max(color.R, Math.Max(color.G, color.B));
+   double range = peak - Math.Min(color.R, Math.Min(color.G, color.B));
+   if (range < 1) return color;
+   double stretch = Math.Min(saturation, peak / range);
+   return Color.FromRgb((byte)Math.Round(peak - (peak - color.R) * stretch),
+    (byte)Math.Round(peak - (peak - color.G) * stretch),
+    (byte)Math.Round(peak - (peak - color.B) * stretch));
   }
   void ProcessExit(object sender, EventArgs args) { StopWorker(); }
   void StopWorker() {
@@ -112,12 +125,21 @@ namespace RetroWindows {
   static void Finish(UdpClient udp, IEnumerable<IPEndPoint> devices, bool turnOff) {
    // UDP has no delivery guarantee. Repeat final state without blocking the UI for long.
    for (int attempt = 0; attempt < 3; attempt++) {
+    if (!turnOff && SystemShutdownRequested()) turnOff = true;
     foreach (IPEndPoint endpoint in devices) {
      if (turnOff) Send(udp, endpoint, Off);
      else { Send(udp, endpoint, White); Send(udp, endpoint, FullBrightness); Send(udp, endpoint, On); }
     }
     if (attempt < 2) Thread.Sleep(80);
    }
+  }
+  static bool SystemShutdownRequested() {
+   try {
+    string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RetroDuetLighting", "shutdown.flag");
+    if (!File.Exists(path)) return false;
+    double age = (DateTime.UtcNow - File.GetLastWriteTimeUtc(path)).TotalSeconds;
+    return age >= -5 && age < 120;
+   } catch (IOException) { return false; } catch (UnauthorizedAccessException) { return false; }
   }
   void Run() {
    UdpClient udp = null; Mutex owner = null; bool owns = false, timedOut = false;

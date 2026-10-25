@@ -2,18 +2,28 @@ using System;using System.Collections.Generic;using System.Drawing;using System.
 namespace RetroWindows {
 public class Options {
  public int FrameRate=144; public bool Cinematic=true; public int Palette=0,Speed=100; public bool Clock=false,Seconds=false,Chinese=true,Animate=true;
+ public bool GoveeLighting=false;
+ public int GoveeSaturation=165;
  public static string FileName { get {return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RetroDuetSaver","settings.xml");} }
- public static Options Load(){try{using(var s=File.OpenRead(FileName)){var o=(Options)new XmlSerializer(typeof(Options)).Deserialize(s);o.Palette=Math.Max(0,Math.Min(16,o.Palette));o.Speed=Math.Max(25,Math.Min(200,o.Speed));return o;}}catch{return new Options();}}
+ public static Options Load(){try{using(var s=File.OpenRead(FileName)){var o=(Options)new XmlSerializer(typeof(Options)).Deserialize(s);o.Palette=Math.Max(0,Math.Min(16,o.Palette));o.Speed=Math.Max(25,Math.Min(200,o.Speed));o.GoveeSaturation=Math.Max(0,Math.Min(300,o.GoveeSaturation));return o;}}catch{return new Options();}}
  public void Save(){Directory.CreateDirectory(Path.GetDirectoryName(FileName));using(var s=File.Create(FileName))new XmlSerializer(typeof(Options)).Serialize(s,this);}
 }
 sealed class Settings:Form {
- Options o=Options.Load();ComboBox frameRate; CheckBox cinematic;ComboBox palette;TrackBar speed;CheckBox animate;
- public Settings(){Text="Mac × Windows · 屏保设置";ClientSize=new Size(470,535);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);BackColor=Color.FromArgb(245,244,239);
+ Options o=Options.Load();ComboBox frameRate; CheckBox cinematic;ComboBox palette;TrackBar speed,goveeSaturation;CheckBox animate,goveeLighting;
+ public Settings(){Text="Mac × Windows · 屏保设置";ClientSize=new Size(470,688);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);BackColor=Color.FromArgb(245,244,239);
  Controls.Add(new Label{Text="Mac × Windows",Font=new Font("Segoe UI",26,FontStyle.Bold),Bounds=new Rectangle(26,18,410,48)});Controls.Add(new Label{Text="经典界面 · 消散转场 · 逐字签名",Bounds=new Rectangle(28,70,420,28),ForeColor=Color.DimGray});Controls.Add(new Label{Text="配色",Bounds=new Rectangle(28,116,90,28)});
  palette=new ComboBox{Bounds=new Rectangle(128,112,300,32),DropDownStyle=ComboBoxStyle.DropDownList};palette.Items.AddRange(new object[]{"单色背景缓慢变色 / 约 3 分钟一圈","琥珀黄","酒红","紫罗兰","青绿","橄榄绿","经典灰","橙","朱红","洋红","紫红","靛蓝","蓝","湖蓝","草绿","柠檬黄","金黄"});palette.SelectedIndex=o.Palette;Controls.Add(palette);
  Controls.Add(new Label{Text="动画速度",Bounds=new Rectangle(28,168,96,28)});speed=new TrackBar{Bounds=new Rectangle(122,158,310,45),Minimum=25,Maximum=200,TickFrequency=25,Value=o.Speed};Controls.Add(speed);
  animate=Check("缓慢镜头漫游",28,214,o.Animate);Controls.Add(new Label{Text="日期时间仅保留在背景像素面板中",Bounds=new Rectangle(28,260,405,28),ForeColor=Color.DimGray});
- Controls.Add(new Label{Text="F11 全屏 · 空格换色 · S 设置 · F2 帧率\nA 自动鼠标 · P 暂停 · Esc 退出",Bounds=new Rectangle(28,394,420,56),ForeColor=Color.DimGray});Controls.Add(new Label{Text="目标帧率",Bounds=new Rectangle(28,309,90,28)}); frameRate=new ComboBox{Bounds=new Rectangle(128,305,300,32),DropDownStyle=ComboBoxStyle.DropDownList};frameRate.Items.AddRange(new object[]{"60 FPS","120 FPS","144 FPS"});frameRate.SelectedIndex=o.FrameRate>=144?2:o.FrameRate>=120?1:0;Controls.Add(frameRate);cinematic=Check("自动鼠标与拖拽演出",28,350,o.Cinematic);var save=new Button{Text="保存设置",Bounds=new Rectangle(296,466,132,38)};save.Click+=delegate{o.FrameRate=new[]{60,120,144}[frameRate.SelectedIndex];o.Cinematic=cinematic.Checked;o.Palette=palette.SelectedIndex;o.Speed=speed.Value;o.Clock=false;o.Animate=animate.Checked;try{o.Save();DialogResult=DialogResult.OK;Close();}catch(Exception ex){MessageBox.Show(this,ex.Message,"无法保存设置");}};Controls.Add(save);AcceptButton=save;
+ Controls.Add(new Label{Text="F11 全屏 · 空格换色 · S 设置 · F2 帧率\nA 自动鼠标 · P 暂停 · Esc 退出",Bounds=new Rectangle(28,550,420,50),ForeColor=Color.DimGray});Controls.Add(new Label{Text="目标帧率",Bounds=new Rectangle(28,309,90,28)}); frameRate=new ComboBox{Bounds=new Rectangle(128,305,300,32),DropDownStyle=ComboBoxStyle.DropDownList};frameRate.Items.AddRange(new object[]{"60 FPS","120 FPS","144 FPS"});frameRate.SelectedIndex=o.FrameRate>=144?2:o.FrameRate>=120?1:0;Controls.Add(frameRate);cinematic=Check("自动鼠标与拖拽演出",28,350,o.Cinematic);
+ goveeLighting=Check("Govee 灯带随屏保变色（可选）",28,391,o.GoveeLighting);goveeLighting.Width=410;
+ var saturationLabel=new Label{Text="灯带饱和度",Bounds=new Rectangle(28,438,96,28),Enabled=o.GoveeLighting};Controls.Add(saturationLabel);
+ goveeSaturation=new TrackBar{Bounds=new Rectangle(122,428,256,50),Minimum=0,Maximum=300,TickFrequency=50,SmallChange=5,LargeChange=25,Value=o.GoveeSaturation,Enabled=o.GoveeLighting,AccessibleName="灯带饱和度百分比"};Controls.Add(goveeSaturation);
+ var saturationValue=new Label{Text=goveeSaturation.Value.ToString(CultureInfo.InvariantCulture)+"%",Bounds=new Rectangle(382,438,60,28),Enabled=o.GoveeLighting};Controls.Add(saturationValue);
+ goveeSaturation.ValueChanged+=delegate{saturationValue.Text=goveeSaturation.Value.ToString(CultureInfo.InvariantCulture)+"%";};
+ goveeLighting.CheckedChanged+=delegate{goveeSaturation.Enabled=saturationLabel.Enabled=saturationValue.Enabled=goveeLighting.Checked;};
+ Controls.Add(new Label{Text="100% 为原始颜色，165% 为当前浓郁效果。\n需启用灯带 LAN Control；下次屏保启动生效。\n满半小时关灯，提前退出恢复 5400K / 100%。",Bounds=new Rectangle(28,482,420,60),ForeColor=Color.DimGray});
+ var save=new Button{Text="保存设置",Bounds=new Rectangle(296,623,132,38)};save.Click+=delegate{o.FrameRate=new[]{60,120,144}[frameRate.SelectedIndex];o.Cinematic=cinematic.Checked;o.Palette=palette.SelectedIndex;o.Speed=speed.Value;o.Clock=false;o.Animate=animate.Checked;o.GoveeLighting=goveeLighting.Checked;o.GoveeSaturation=goveeSaturation.Value;try{o.Save();DialogResult=DialogResult.OK;Close();}catch(Exception ex){MessageBox.Show(this,ex.Message,"无法保存设置");}};Controls.Add(save);AcceptButton=save;
  }
  CheckBox Check(string t,int x,int y,bool v){var c=new CheckBox{Text=t,Bounds=new Rectangle(x,y,205,30),Checked=v};Controls.Add(c);return c;}
 }
