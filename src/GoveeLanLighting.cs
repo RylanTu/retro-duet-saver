@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -23,8 +23,9 @@ namespace RetroWindows {
   readonly Func<Color> readColor;
   readonly double saturation;
   readonly HashSet<string> allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-  volatile bool stopping;
-  int targetRgb, disposed;
+  volatile bool stopping, finished;
+  readonly Dispatcher ui = Dispatcher.CurrentDispatcher;
+  int targetRgb, disposed, colorReady;
   static readonly IPEndPoint Discovery = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 4001);
   const string Scan = "{\"msg\":{\"cmd\":\"scan\",\"data\":{\"account_topic\":\"reserve\"}}}";
   const string On = "{\"msg\":{\"cmd\":\"turn\",\"data\":{\"value\":1}}}";
@@ -37,13 +38,12 @@ namespace RetroWindows {
    saturation = Math.Max(0, Math.Min(300, saturationPercent)) / 100.0;
    string filter = Environment.GetEnvironmentVariable("RETRO_DUET_GOVEE_IPS");
    if (!string.IsNullOrWhiteSpace(filter)) foreach (string ip in filter.Split(new[]{',',';',' '}, StringSplitOptions.RemoveEmptyEntries)) allowed.Add(ip.Trim());
-   Sample(null, EventArgs.Empty);
+   // Sample only after discovering a device.
    sampler = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
    sampler.Tick += Sample;
    worker = new Thread(Run) { IsBackground = true, Name = "Govee LAN ambient lighting" };
    if (Environment.GetEnvironmentVariable("RETRO_DUET_GOVEE") == "0") return;
    AppDomain.CurrentDomain.ProcessExit += ProcessExit;
-   sampler.Start();
    worker.Start();
   }
 
@@ -51,6 +51,7 @@ namespace RetroWindows {
    if (lifetime.Elapsed.TotalSeconds >= LimitSeconds) { if (sampler != null) sampler.Stop(); return; }
    Color c = DeepenColor(readColor());
    Interlocked.Exchange(ref targetRgb, (c.R << 16) | (c.G << 8) | c.B);
+   Interlocked.Exchange(ref colorReady, 1);
   }
   // Stretch RGB chroma around its peak: preserve hue and peak brightness while
   // removing more of the gray/white component. Neutral colors remain neutral.
@@ -116,8 +117,9 @@ namespace RetroWindows {
      if (devices.ContainsKey(ip) || (allowed.Count > 0 && !allowed.Contains(ip))) continue;
      var endpoint = new IPEndPoint(source.Address, 4003);
      devices.Add(ip, endpoint);
+     if(devices.Count==1) ui.BeginInvoke(new Action(delegate { if(!stopping&&!finished){Sample(null,EventArgs.Empty);sampler.Start();} }));
      Log("Discovered " + ip + " (" + Convert.ToString(data["sku"], CultureInfo.InvariantCulture) + ")");
-     Send(udp, endpoint, Rgb(Interlocked.CompareExchange(ref targetRgb, 0, 0)));
+     if(Interlocked.CompareExchange(ref colorReady,0,0)!=0) Send(udp, endpoint, Rgb(Interlocked.CompareExchange(ref targetRgb, 0, 0)));
      Send(udp, endpoint, On);
     } catch (ArgumentException) { } catch (InvalidOperationException) { }
    }
@@ -164,13 +166,17 @@ namespace RetroWindows {
      double now = lifetime.Elapsed.TotalSeconds;
      if (now >= LimitSeconds) { timedOut = true; break; }
      try {
-      if (now >= nextScan) { nextScan = now + (now < 5 ? 1 : 30); Discover(udp); }
+      if (now >= nextScan) { nextScan = now + 30; Discover(udp); }
+      // Listen briefly after each scan; otherwise sleep until the next discovery.
+      if(devices.Count==0 && now < nextScan-28) { wake.WaitOne((int)Math.Max(1,Math.Min(nextScan-now,LimitSeconds-now)*1000)); continue; }
       Receive(udp, devices, parser);
      } catch (SocketException) {
       // A sleeping/disconnected device may produce ICMP/WSAECONNRESET on Windows.
       // Keep the session alive so the remaining lights still obey the deadline.
      } catch (NetworkInformationException) { }
+     if(devices.Count==0 || Interlocked.CompareExchange(ref colorReady,0,0)==0){wake.WaitOne(100);continue;}
      int target = Interlocked.CompareExchange(ref targetRgb, 0, 0);
+     if(sent==-1){r=(target>>16)&255;g=(target>>8)&255;b=target&255;}
      double blend = 1 - Math.Exp(-Math.Min(1, now - previous) / .25); previous = now;
      r += (((target >> 16) & 255) - r) * blend;
      g += (((target >> 8) & 255) - g) * blend;
@@ -185,6 +191,8 @@ namespace RetroWindows {
     }
    } catch (Exception error) { Log(error.GetType().Name + ": " + error.Message); }
    finally {
+    finished=true;
+    if(!ui.HasShutdownStarted) ui.BeginInvoke(new Action(delegate { sampler.Stop(); }));
     if (udp != null) {
      bool off = timedOut || lifetime.Elapsed.TotalSeconds >= LimitSeconds;
      if (devices.Count > 0) { Finish(udp, devices.Values, off); Log(off ? "30-minute limit: lights off." : "Saver exit: 5400 K, 100% brightness."); }

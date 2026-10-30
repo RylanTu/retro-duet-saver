@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -24,7 +24,7 @@ namespace RetroDuetLighting {
   static readonly HandlerProc handlerCallback = Control;
   static IntPtr statusHandle;
   static Thread bootWorker;
-  static int stopping, discoverySeconds = 120;
+  static int stopping;
   const string Scan = "{\"msg\":{\"cmd\":\"scan\",\"data\":{\"account_topic\":\"reserve\"}}}";
   const string White = "{\"msg\":{\"cmd\":\"colorwc\",\"data\":{\"color\":{\"r\":255,\"g\":255,\"b\":255},\"colorTemInKelvin\":5400}}}";
   const string Bright = "{\"msg\":{\"cmd\":\"brightness\",\"data\":{\"value\":100}}}";
@@ -82,7 +82,7 @@ namespace RetroDuetLighting {
     var list=value as object[];if(list==null)throw new FormatException("DeviceIps must be an array.");
     foreach(object item in list){IPAddress ip;if(!IPAddress.TryParse(Convert.ToString(item,CultureInfo.InvariantCulture),out ip)||ip.AddressFamily!=AddressFamily.InterNetwork)throw new FormatException("DeviceIps must contain IPv4 addresses.");allowed.Add(ip.ToString());}
    }
-   if(root!=null&&root.TryGetValue("DiscoverySeconds",out value))discoverySeconds=Math.Max(10,Math.Min(600,Convert.ToInt32(value,CultureInfo.InvariantCulture)));
+
   }
   static void Send(UdpClient udp,IPAddress ip,int port,string message) {
    try {byte[] bytes=Encoding.UTF8.GetBytes(message);udp.Send(bytes,bytes.Length,new IPEndPoint(ip,port));}
@@ -99,15 +99,13 @@ namespace RetroDuetLighting {
    }
   }
   static void Boot() {
-   var elapsed=Stopwatch.StartNew();
-   Log("Service started: waiting up to "+discoverySeconds+" seconds for Govee LAN devices.");
-   while(!cancel.WaitOne(0)&&elapsed.Elapsed.TotalSeconds<discoverySeconds){
-    try{ScanOnce();}catch(SocketException error){Log("Discovery retry: "+error.SocketErrorCode);}catch(NetworkInformationException){}catch(Exception error){Log(error.Message);}
-    lock(gate){if(devices.Count>0)break;}
-    if(cancel.WaitOne(3000))return;
-   }
-   lock(gate)Log("Boot discovery complete: "+devices.Count+" device(s). Discovery port released; service idle.");
+   Log("Service started: one discovery round (2 seconds).");
+   try{if(!cancel.WaitOne(0))ScanOnce();}
+   catch(SocketException error){Log("Discovery unavailable: "+error.SocketErrorCode);}
+   catch(Exception error){Log("Discovery ended: "+error.Message);}
+   lock(gate)Log("Boot discovery complete: "+devices.Count+" device(s). No retries; service idle.");
   }
+
   static void ScanOnce() {
    using(var udp=new UdpClient(AddressFamily.InterNetwork)){
     udp.ExclusiveAddressUse=true;udp.Client.SendTimeout=100;udp.Client.ReceiveTimeout=100;
