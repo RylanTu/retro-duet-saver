@@ -98,8 +98,35 @@ namespace RetroDuetLighting {
     }
    }
   }
+  static bool LanReady() {
+   try{foreach(var nic in NetworkInterface.GetAllNetworkInterfaces()){
+    if(nic.OperationalStatus!=OperationalStatus.Up || (nic.NetworkInterfaceType!=NetworkInterfaceType.Ethernet && nic.NetworkInterfaceType!=NetworkInterfaceType.Wireless80211))continue;
+    foreach(var address in nic.GetIPProperties().UnicastAddresses){
+     var ip=address.Address;if(ip.AddressFamily!=AddressFamily.InterNetwork)continue;
+     var bytes=ip.GetAddressBytes();
+     if(!IPAddress.IsLoopback(ip)&&!ip.Equals(IPAddress.Any)&&!(bytes[0]==169&&bytes[1]==254))return true;
+    }
+   }}catch(NetworkInformationException){}
+   return false;
+  }
+  static bool WaitForLan() {
+   using(var changed=new AutoResetEvent(false)){
+    NetworkAddressChangedEventHandler handler=delegate {try{changed.Set();}catch(ObjectDisposedException){}};
+    NetworkChange.NetworkAddressChanged+=handler;
+    try{
+     while(!cancel.WaitOne(0)){
+      if(LanReady()){if(cancel.WaitOne(1000))return false;if(LanReady())return true;}
+      // Address notifications wake immediately; the timeout covers missed link events.
+      if(WaitHandle.WaitAny(new WaitHandle[]{cancel,changed},30000)==0)return false;
+     }
+     return false;
+    }finally{NetworkChange.NetworkAddressChanged-=handler;}
+   }
+  }
   static void Boot() {
-   Log("Service started: one discovery round (2 seconds).");
+   Log("Service started: waiting for Ethernet/Wi-Fi IPv4 connectivity.");
+   if(!WaitForLan()){Log("Network wait cancelled.");return;}
+   Log("LAN ready: one discovery round (2 seconds).");
    try{if(!cancel.WaitOne(0))ScanOnce();}
    catch(SocketException error){Log("Discovery unavailable: "+error.SocketErrorCode);}
    catch(Exception error){Log("Discovery ended: "+error.Message);}

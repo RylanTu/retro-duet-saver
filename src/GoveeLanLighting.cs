@@ -23,7 +23,7 @@ namespace RetroWindows {
   readonly Func<Color> readColor;
   readonly double saturation;
   readonly HashSet<string> allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-  volatile bool stopping, finished;
+  volatile bool stopping, finished, systemShutdown;
   readonly Dispatcher ui = Dispatcher.CurrentDispatcher;
   int targetRgb, disposed, colorReady;
   static readonly IPEndPoint Discovery = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 4001);
@@ -63,6 +63,11 @@ namespace RetroWindows {
    return Color.FromRgb((byte)Math.Round(peak - (peak - color.R) * stretch),
     (byte)Math.Round(peak - (peak - color.G) * stretch),
     (byte)Math.Round(peak - (peak - color.B) * stretch));
+  }
+  public void RequestShutdown() { systemShutdown=true; StopWorker(); }
+  internal static int DiscoveryIdleMilliseconds(double now,double nextScan,int count) {
+   if(count>0 || now<nextScan-28)return 0;
+   return (int)Math.Max(0,Math.Min(nextScan-now,LimitSeconds-now)*1000);
   }
   void ProcessExit(object sender, EventArgs args) { StopWorker(); }
   void StopWorker() {
@@ -117,7 +122,7 @@ namespace RetroWindows {
      if (devices.ContainsKey(ip) || (allowed.Count > 0 && !allowed.Contains(ip))) continue;
      var endpoint = new IPEndPoint(source.Address, 4003);
      devices.Add(ip, endpoint);
-     if(devices.Count==1) ui.BeginInvoke(new Action(delegate { if(!stopping&&!finished){Sample(null,EventArgs.Empty);sampler.Start();} }));
+     if(devices.Count==1) ui.BeginInvoke(new Action(delegate { if(!stopping&&!finished&&lifetime.Elapsed.TotalSeconds<LimitSeconds){Sample(null,EventArgs.Empty);sampler.Start();} }));
      Log("Discovered " + ip + " (" + Convert.ToString(data["sku"], CultureInfo.InvariantCulture) + ")");
      if(Interlocked.CompareExchange(ref colorReady,0,0)!=0) Send(udp, endpoint, Rgb(Interlocked.CompareExchange(ref targetRgb, 0, 0)));
      Send(udp, endpoint, On);
@@ -168,7 +173,8 @@ namespace RetroWindows {
      try {
       if (now >= nextScan) { nextScan = now + 30; Discover(udp); }
       // Listen briefly after each scan; otherwise sleep until the next discovery.
-      if(devices.Count==0 && now < nextScan-28) { wake.WaitOne((int)Math.Max(1,Math.Min(nextScan-now,LimitSeconds-now)*1000)); continue; }
+      int idle=DiscoveryIdleMilliseconds(now,nextScan,devices.Count);
+      if(idle>0) { wake.WaitOne(idle); continue; }
       Receive(udp, devices, parser);
      } catch (SocketException) {
       // A sleeping/disconnected device may produce ICMP/WSAECONNRESET on Windows.
@@ -194,8 +200,8 @@ namespace RetroWindows {
     finished=true;
     if(!ui.HasShutdownStarted) ui.BeginInvoke(new Action(delegate { sampler.Stop(); }));
     if (udp != null) {
-     bool off = timedOut || lifetime.Elapsed.TotalSeconds >= LimitSeconds;
-     if (devices.Count > 0) { Finish(udp, devices.Values, off); Log(off ? "30-minute limit: lights off." : "Saver exit: 5400 K, 100% brightness."); }
+     bool off = systemShutdown || SystemShutdownRequested() || timedOut || lifetime.Elapsed.TotalSeconds >= LimitSeconds;
+     if (devices.Count > 0) { Finish(udp, devices.Values, off); Log(off ? "Shutdown or time limit: lights off." : "Saver exit: 5400 K, 100% brightness."); }
      udp.Close();
     }
     if (owns) owner.ReleaseMutex();
