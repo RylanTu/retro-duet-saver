@@ -1,79 +1,81 @@
 # Retro Duet Saver
 
-**让 Macintosh 与 Windows 95/98 的经典界面，在同一块像素画布里缓慢游走。**
+**让 Macintosh 与 Windows 95/98 的经典界面，在像素画布里缓慢游走。**
 
-运行于 Windows 11 的复古动态屏保。以黑色像素、缓慢变换的底色、柔和的立体边缘与自动鼠标演出，重新呈现两个桌面时代。
+运行于 Windows 11 的复古动态屏保：黑色像素、立体边缘、渐变配色，以及自动鼠标交互。灵感来自 macOS Sequoia 的 Macintosh 屏保。
 
 ![Macintosh 编辑器](docs/images/macintosh.png)
 ![Windows 经典界面](docs/images/windows.png)
 
-## 下载与运行
+## 场景与动效
 
-前往 [Releases](https://github.com/RylanTu/retro-duet-saver/releases) 下载最新 ZIP，解压后运行 **RetroDuetSaver.exe**。也可双击 **Preview.cmd**。
-
-- **F11 / Enter**：切换全屏；**Esc**：退出。
-- **S**：打开设置；**空格**：切换配色。
-- **A**：开关自动鼠标演出；**P**：暂停 / 继续；**F2**：显示帧率。
-- 双击 **Screensaver.cmd** 进入多屏屏保；屏保模式下移动鼠标或按键会退出。
-
-安装到 Windows 屏保列表的方法见 [安装与使用](docs/USAGE.md)。程序是屏幕保护程序；账户锁定由 Windows 的“在恢复时显示登录屏幕”负责。
-
-## 你会看到什么
-
-- **38 个场景条目**，涵盖 Macintosh 与 Windows 经典应用、控制面板、时钟、错误对话框和文档。
-- 首个场景一定是时钟，系统随机；后续排除刚展示过的条目，从其余 37 个条目中等概率抽取，避免相邻重复。时钟保留较长展示时间。
-- 场景内持续漫游，场景间采用多种消散、留白和浮现过渡。
-- 自动鼠标拖动滑块、拖拽窗口、点击、绘图及逐字输入。界面是代码绘制的动画场景，不是可使用的桌面或模拟器。
-- Windows 场景参考真实的 Paint、WordPad、Word / Clippy、Minesweeper、Calculator、MS-DOS Prompt、Character Map 及属性对话框。
-- 两个系统的计算器都输入并停留在 **1984**，作为致敬。
-- 两个系统的签名：**By RylanTu / Passion for a better world**。
-- 编辑器中藏着 DON'T PANIC、42、DO NOT ANSWER，以及 Across the Great Wall, we can reach every corner in the world.
+- **40 个 Mac / Windows 场景**：时钟、控制面板、编辑器、画图、计算器、错误窗口、扫雷、字符映射表、MS-DOS 和 Clippy。
+- **随机播放**：首次显示时钟，系统随机；之后各场景等概率出现，相邻不重复。
+- **分场景镜头**：控制面板近景巡览、音量纵向移动、键盘横向掠过、画图缓慢拉远；倾角固定，平移与推拉平滑衔接。
+- **像素转场**：像素随空间位置逐渐缩小、消散，再从纯色背景中浮现。
+- **自动交互**：鼠标移动、点击、滑块拖动、窗口拖拽、绘图与逐字输入；错误窗口关闭后回原位重新弹出。
+- **经典控制面板**：原生像素绘制早期 Macintosh 的键盘、鼠标、菜单闪烁、插入点闪烁、桌面图案和双击速度控件。
+- **启动演出**：问号软盘切换至 Happy Mac，图标轮廓与背景衔接。
+- **科幻彩蛋**：DON'T PANIC、DO NOT ANSWER、七百五十万年计算与 42；两套计算器输入 1984。
+- **签名演出**：By RylanTu / Passion for a better world。
 
 完整目录见 [场景一览](docs/SCENES.md)。
 
-## 交互检查模式
+## 下载与运行
 
-运行 **Review-Quick.cmd** 可快速看完 38 个场景（每场约 8 秒），**Review-Normal.cmd** 按正常时长查看。检查模式中，PgDn 下一场、PgUp 上一场、Home 重播、P 暂停。
+前往 [Releases](https://github.com/RylanTu/retro-duet-saver/releases) 下载 ZIP，解压后运行 **RetroDuetSaver.exe** 或 **Preview.cmd**。
 
-新增场景的点击会更新字号、下划线、选中项、图案或文档字段；滑块实时跟随拖动。DOS 场景包含输入命令后报错的文字彩蛋。
+| 入口 | 功能 |
+| --- | --- |
+| Preview.cmd | 完整随机播放 |
+| Screensaver.cmd | 多屏屏保，移动鼠标或按键退出 |
+| Settings.cmd | 配色、速度、帧率与灯带设置 |
+| Control-Panel-Preview.cmd | Mac 控制面板预览 |
+| Review-Quick.cmd | 快速浏览全部场景 |
+| Review-Normal.cmd | 按正常时长浏览全部场景 |
 
-## 多屏与性能
+右键 **RetroDuetSaver.scr** → **安装**，即可在 Windows 屏幕保护程序设置中选择本项目。[安装与使用](docs/USAGE.md)
 
-灯带联动为可选功能，默认关闭。在设置中勾选“Govee 灯带随屏保变色（可选）”后，正式屏保可自动发现并打开局域网灯带，以更浓郁的颜色平滑跟随画面；运行满半小时关闭，提前退出恢复为 5400 K、100% 亮度。需先启用设备的 LAN Control。配置、网络要求及多设备限制见 [灯带联动](docs/GOVEE-LAN.md)。
+**快捷键**：F11 / Enter 全屏，Esc 退出，S 设置，空格切换配色，A 开关自动鼠标，P 暂停，F2 显示帧率。检查模式支持 PgDn / PgUp 切换场景、Home 重播。
 
-多屏模式共享一套场景、随机调度和动画状态，通过共享缓存映射到各个屏幕；各屏同步播放，按比例居中裁切。支持显示器配置变更后重建窗口。
+## 多屏与渲染
 
-可设置 60 / 120 / 144 FPS 目标上限；实际帧率取决于显示器、GPU、分辨率与系统合成。静态像素材质缓存复用，只有时钟、输入和演出状态按需更新。**尚未完成各类多屏硬件的系统性性能测试**。详见 [渲染与性能](docs/ARCHITECTURE.md)。
+- 多屏共享场景、随机调度与动画状态，同步播放并按屏幕比例裁切。
+- 显示器配置变化后自动重建屏保窗口。
+- 支持 60 / 120 / 144 FPS 目标上限。
+- 静态材质缓存复用、可见区域裁剪，时钟和交互内容按需更新。
+- 转场结束后卸下像素缩放着色器及采样表面。
 
-## 开关机灯带工具
+## Govee 灯带联动
 
-另附独立的 [Govee 开关机灯光服务](https://github.com/RylanTu/retro-duet-saver/blob/main/tools/govee-boot/README.md)：开机发现后设为 5400 K、100% 亮度，正常关机关闭。提供安装、卸载与设备限制配置，运行时无窗口。该工具需要单独安装，不随屏保自动注册。
+在设备中启用 **LAN Control**，再在屏保设置中开启灯带联动：
+
+- 自动发现局域网设备并开灯。
+- 灯光随画面颜色平滑渐变，饱和度可调。
+- 屏保运行满半小时关闭灯带。
+- 半小时内退出，恢复至 5400 K、100% 亮度。
+
+另提供独立的 [开关机灯光服务](tools/govee-boot/README.md)：开机发现设备并设为 5400 K、100% 亮度，正常关机关闭。[灯带配置](docs/GOVEE-LAN.md)
 
 ## 从源码构建
 
-Windows x64，安装 Windows 自带的 .NET Framework 4.x / WPF 环境。构建脚本使用系统 csc.exe，不需要 NuGet。
+使用 Windows x64 自带的 .NET Framework 4.x、WPF 与 C# 编译器。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-输出位于 dist/：EXE、SCR 及便携 ZIP。详见 [开发说明](docs/DEVELOPMENT.md)。
-
-## 项目结构
+构建结果输出至 `dist/`，包含 EXE、SCR、启动脚本和便携 ZIP。
 
 ```text
-src/                  C# / WPF 源码
-scripts/              预览、设置与多屏屏保启动器
-docs/                 安装、开发、场景依据与性能说明
-docs/images/          实际程序画面
-build.ps1             本机构建与打包
-docs/examples/        可选的 GitHub Actions 构建模板
+src/                 C# / WPF 场景、交互与渲染
+shaders/             像素缩放着色器及编译字节码
+scripts/             预览、设置与屏保启动器
+examples/            计算场景 BASIC 示例
+tools/              着色器构建与灯光服务
+docs/               使用、开发与场景资料
 ```
 
-## 说明与致谢
-
-灵感来自 macOS Sequoia 的 Macintosh 屏保，以及 Macintosh、Windows 95/98 与 Office 的经典界面。本项目为独立制作的风格化重绘，不隶属于 Apple 或 Microsoft，也不承诺逐像素复刻。界面考据见 [Windows 场景依据](docs/SCENE-REFERENCES.md)。
-
-宣传剪辑使用过的音乐与参考视频不在本仓库或发布包中分发。字体来源与品牌说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[开发说明](docs/DEVELOPMENT.md) · [渲染设计](docs/ARCHITECTURE.md) · [字体与素材来源](THIRD_PARTY_NOTICES.md) · [MIT License](LICENSE)
 
 By **RylanTu** · Passion for a better world

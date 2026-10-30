@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -152,7 +152,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  return materials;
  }
  void AddSurface(WCanvas parent,List<SurfaceMaterial> materials,int originX,int originY){
- foreach(var m in materials){var tile=new Image{Width=m.Width,Height=m.Height,Source=m.Image,Stretch=Stretch.Fill,IsHitTestVisible=false};WCanvas.SetLeft(tile,m.X);WCanvas.SetTop(tile,m.Y);parent.Children.Add(tile);var bounds=new Rect(originX+m.X-12,originY+m.Y-12,m.Width+24,m.Height+24);if(originX!=0)bounds.Inflate(160,90);surfaceTiles.Add(new SurfaceTile{Visual=tile,Bounds=bounds});}
+ foreach(var m in materials){var tile=new Image{Width=m.Width,Height=m.Height,Source=m.Image,Stretch=Stretch.Fill,IsHitTestVisible=false};WCanvas.SetLeft(tile,m.X);WCanvas.SetTop(tile,m.Y);parent.Children.Add(tile);var bounds=new Rect(originX+m.X-12,originY+m.Y-12,m.Width+24,m.Height+24);if(originX!=0)bounds.Inflate(160,90);if(parent!=dialog)surfaceTiles.Add(new SurfaceTile{Visual=tile,Bounds=bounds});}
  }
  // Bake the immutable face and its soft shadow once. Foreground alpha is copied unchanged.
  internal static BitmapSource BakeInk(BitmapSource mask){
@@ -195,7 +195,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  double compositeActorTime=double.NaN;
  public void CompositeFrame(double t,int scene,double local,Rect visible,double actorTime=double.NaN){compositeActorTime=actorTime;motion=t;colorClock=t;wallElapsed=double.IsNaN(actorTime)?watch.Elapsed.TotalSeconds:actorTime;sceneIndex=scene;sceneLocal=local;visibleWorld=visible;
  bool changed=scene!=lastCompositeScene;
- if(changed||t>=nextCull||!lastCullRect.Contains(visible)){nextCull=t+.1;lastCullRect=visible;if(!lastCullRect.IsEmpty)lastCullRect.Inflate(32,32);foreach(var tile in surfaceTiles){bool show=lastCullRect.IntersectsWith(tile.Bounds);if(show!=tile.Visible){tile.Visual.Visibility=show?Visibility.Visible:Visibility.Hidden;tile.Visible=show;}}}
+ if(changed||(visible.IsEmpty?!lastCullRect.IsEmpty:t>=nextCull||!lastCullRect.Contains(visible))){nextCull=t+.1;lastCullRect=visible;if(!lastCullRect.IsEmpty)lastCullRect.Inflate(32,32);foreach(var tile in surfaceTiles){bool show=lastCullRect.IntersectsWith(tile.Bounds);if(show!=tile.Visible){tile.Visual.Visibility=show?Visibility.Visible:Visibility.Hidden;tile.Visible=show;}}}
  lastCompositeScene=scene;
  Update(t,false);
  }
@@ -223,9 +223,12 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  static Color FromLab(Lab c){double l=c.L+.3963377774*c.A+.2158037573*c.B;double m=c.L-.1055613458*c.A-.0638541728*c.B;double s=c.L-.0894841775*c.A-1.2914855480*c.B;l=l*l*l;m=m*m*m;s=s*s*s;return Color.FromScRgb(1,Clamp(4.0767416621*l-3.3077115913*m+.2309699292*s),Clamp(-1.2684380046*l+2.6097574011*m-.3413193965*s),Clamp(-.0041960863*l-.7034186147*m+1.7076147010*s));}
 
  void Update(double t,bool force){if(!compositeMode&&(force||wallElapsed>=nextColorUpdate||observedPalette!=Options.Palette)){nextColorUpdate=wallElapsed+1.0/30;int idx=Math.Max(0,Math.Min(Bg.Length-1,Options.Palette-1));double phase=(colorClock/180.0%1)*SpectrumLabs.Length;int segment=(int)Math.Floor(phase);Lab target=Options.Palette==0?SpectrumAt(segment,phase-segment):BgLabs[idx];if(observedPalette!=Options.Palette){if(observedPalette>=0){paletteFrom=ToLab(paper.Color);paletteChangedAt=wallElapsed;}observedPalette=Options.Palette;}double manual=SoftEase((wallElapsed-paletteChangedAt)/3);paper.Color=FromLab(manual<1?Blend(paletteFrom,target,manual):target);light.Color=Mix(paper.Color,Color.FromRgb(250,244,224),.8);}
- if(!compositeMode||sceneIndex!=priorScene||t>=nextActor){bool moving=Options.Cinematic&&sceneIndex>=0&&sceneLocal<18;nextActor=t+(moving?1.0/60:.1);if(sceneIndex>=0||priorScene>=0||visibleWorld.IntersectsWith(MouseArea)||visibleWorld.IntersectsWith(SignatureArea))Perform(sceneIndex,sceneLocal,double.IsNaN(compositeActorTime)?t:compositeActorTime);}
+ // The shared scheduler already limits frames. Do not resample motion using
+ // scaled scene time: slow playback otherwise repeats frames, and late actions stutter.
+ bool moving=Options.Cinematic&&sceneIndex>=0&&sceneLocal<20;
+ if(!compositeMode||sceneIndex!=priorScene||moving||wallElapsed>=nextActor){nextActor=wallElapsed+.1;if(sceneIndex>=0||priorScene>=0||visibleWorld.IntersectsWith(MouseArea)||visibleWorld.IntersectsWith(SignatureArea))Perform(sceneIndex,sceneLocal,double.IsNaN(compositeActorTime)?t:compositeActorTime);}
 
- UpdateDialogPop(t);
+ UpdateDialogPop(double.IsNaN(compositeActorTime)?t:compositeActorTime);
  // Only the clock panel reads wall time; offscreen content catches up on entry.
  if(force||(visibleWorld.IntersectsWith(TimeArea)&&wallElapsed>=nextClockPoll)){var now=DateTime.Now;nextClockPoll=wallElapsed+(1000-now.Millisecond)/1000.0+.002;double second=Math.Floor(now.TimeOfDay.TotalSeconds);
  if(force||lastClock!=second||lastTwelve!=twelve){lastClock=second;lastTwelve=twelve;digital.Data=ClockDigits(now.ToString(twelve?"h:mm:ss":"H:mm:ss"));hands.Data=ClockHands(now);}
@@ -236,10 +239,10 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  void UpdateDialogPop(double t){
  if(double.IsNaN(dialogPopAt))return;
  double progress=Math.Max(0,Math.Min(1,(t-dialogPopAt)/.22)),ease=1-Math.Pow(1-progress,3);
- dialogScale.ScaleX=dialogScale.ScaleY=.96+.04*ease;dialogLift.Y=8*(1-ease);dialog.Opacity=.3+.7*ease;
+ dialogScale.ScaleX=dialogScale.ScaleY=.96+.04*ease;dialogLift.Y=8*(1-ease);dialog.Opacity=1;
  if(progress>=1){dialogPopAt=double.NaN;dialog.CacheMode=null;}
  }
- void Perform(int scene,double p,double t){bool active=Options.Cinematic;double cx=1020,cy=730,drag=0;bool pressed=false;if(priorScene!=scene){if(scene==3){dialogEntryX=dialogX;dialogEntryY=dialogY;dialogOpen=true;}if(scene==6){signatureTypingAt=t+Math.Max(.8,(8-p)*2.5);signatureAuthorCount=signatureMottoCount=-1;}if(scene==2)volumeEntry=volume;if(scene==4)repeatEntry=repeatPosition;if(scene==5){patternClick1Done=false;patternClick2Done=false;}}bool keyDown=false,restartDown=false;if(visibleWorld.IntersectsWith(SignatureArea))UpdateSignature(t);
+ void Perform(int scene,double p,double t){bool active=Options.Cinematic;double cx=1020,cy=730,drag=0;bool pressed=false;if(priorScene!=scene){if(scene==3){dialogEntryX=dialogX;dialogEntryY=dialogY;dialogOpen=true;dialogWasOpen=true;dialogPopAt=double.NaN;dialogScale.ScaleX=dialogScale.ScaleY=1;dialogLift.Y=0;dialog.Opacity=1;dialog.CacheMode=null;}if(scene==6){signatureTypingAt=t+Math.Max(.8,(8-p)*2.5);signatureAuthorCount=signatureMottoCount=-1;}if(scene==2)volumeEntry=volume;if(scene==4)repeatEntry=repeatPosition;if(scene==5){patternClick1Done=false;patternClick2Done=false;}}bool keyDown=false,restartDown=false;if(visibleWorld.IntersectsWith(SignatureArea))UpdateSignature(t);
  if(active){
  if(scene==0){twelve=p>=5&&p<9;cx=Lerp(900,150,Ease(p/3));cy=Lerp(195,562,Ease(p/3));if(p>=5){cx=Lerp(150,574,Ease((p-5)/3));cy=562;}if(p>=10){cx=Lerp(574,690,Ease((p-10)/4));cy=Lerp(562,690,Ease((p-10)/4));}pressed=(p>=4.7&&p<5.1)||(p>=8.7&&p<9.1);}
  if(scene==1){if(p>=12)rate=2;else if(p>=8)rate=1;else if(p>=4.9)rate=0;cx=1254;cy=380;if(p<3){cx=Lerp(1100,1254,Ease(p/3));cy=Lerp(200,380,Ease(p/3));}else if(p>=5){cx=Lerp(1254,1499,Ease((p-5)/3));}if(p>=9)cx=Lerp(1499,1744,Ease((p-9)/3));if(p>=14){cx=Lerp(1744,2030,Ease((p-14)/3));cy=Lerp(380,710,Ease((p-14)/3));}pressed=(p>=4.8&&p<5.2)||(p>=7.9&&p<8.2)||(p>=11.9&&p<12.2);}
@@ -253,7 +256,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
 
  }
  ((TranslateTransform)selectedClock.RenderTransform).X=twelve?142:562;((TranslateTransform)selectedRate.RenderTransform).X=1242+rate*245;
- keyPress.Visibility=keyDown?Visibility.Visible:Visibility.Collapsed;restartPress.Visibility=restartDown?Visibility.Visible:Visibility.Collapsed;repeatShift.X=repeatPosition-700;volumeShift.Y=Art.SoundTrackY+volume*Art.SoundTravel;double knobAlpha=pressed&&scene==2?.78:1;if(volumeKnob.Opacity!=knobAlpha)volumeKnob.Opacity=knobAlpha;dialogShift.X=1065+dialogX;dialogShift.Y=855+dialogY;if(dialogOpen&&!dialogWasOpen){dialogPopAt=t;dialog.CacheMode=new BitmapCache(2);}dialogWasOpen=dialogOpen;dialog.Visibility=dialogOpen?Visibility.Visible:Visibility.Hidden;
+ keyPress.Visibility=keyDown?Visibility.Visible:Visibility.Collapsed;restartPress.Visibility=restartDown?Visibility.Visible:Visibility.Collapsed;repeatShift.X=repeatPosition-700;volumeShift.Y=Art.SoundTrackY+volume*Art.SoundTravel;double knobAlpha=pressed&&scene==2?.78:1;if(volumeKnob.Opacity!=knobAlpha)volumeKnob.Opacity=knobAlpha;dialogShift.X=1065+dialogX;dialogShift.Y=855+dialogY;if(dialogOpen&&!dialogWasOpen){dialogPopAt=t;dialog.CacheMode=null;}dialogWasOpen=dialogOpen;dialog.Visibility=dialogOpen?Visibility.Visible:Visibility.Hidden;
  double period=rate==0?1.6:rate==1?1.2:.9;if(visibleWorld.IntersectsWith(MouseArea))caret.Visibility=(t%period<period*.5)?Visibility.Visible:Visibility.Hidden;if(caret.Data==null)caret.Data=Pixels(new[]{"100000010000001","010000010000010","001000010000100","000000010000000","000000010000000","001000010000100","010000010000010","100000010000001"},1430,285,5);
  if(priorScene!=scene){actorChangedAt=t;actorFromX=cursorShift.X;actorFromY=cursorShift.Y;priorScene=scene;}double approach=Ease((t-actorChangedAt)/1.2);cursorShift.X=Lerp(actorFromX,cx,approach);cursorShift.Y=Lerp(actorFromY,cy,approach);pointer.Visibility=active?Visibility.Visible:Visibility.Collapsed;
  }

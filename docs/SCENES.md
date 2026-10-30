@@ -1,6 +1,6 @@
 # 场景目录
 
-当前源码固定路线共有 38 个条目；随机模式不会按此列表顺序播放。同类应用的近景与不同内容页各占一个条目。
+当前源码固定路线共有 40 个条目；随机模式不会按此列表顺序播放。同类应用的近景与不同内容页各占一个条目。
 
 | Macintosh | Windows |
 | --- | --- |
@@ -24,5 +24,6 @@
 | 桌面 | Display Properties |
 | — | About Windows |
 | — | Mouse Properties：Buttons |
+| Deep Thought 计算演出（Mathematica） | Deep Thought 计算演出（DOS / QBasic） |
 
-Macintosh 18 个条目，Windows 20 个条目。场景分类用于查阅，不表示不同系统的每一行都是功能完全相同的应用。
+Macintosh 19 个条目，Windows 21 个条目。场景分类用于查阅，不表示不同系统的每一行都是功能完全相同的应用。
