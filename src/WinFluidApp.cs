@@ -87,6 +87,7 @@ sealed class FluidView:Grid {
  const double SignatureLeft=700,SignatureAuthorTop=2620,SignatureMottoTop=2740;
  static readonly Drawing.Rectangle SignatureAuthorInk=WindowsPixels.MonoBounds(SignatureAuthor),SignatureMottoInk=WindowsPixels.MonoBounds(SignatureMotto);
  static readonly double SignatureAuthorPitch=MacInkHeight(SignatureAuthor)*7.0/Math.Max(1,SignatureAuthorInk.Height),SignatureMottoPitch=MacInkHeight(SignatureMotto)*5.0/Math.Max(1,SignatureMottoInk.Height);
+ static readonly SignatureCache authorSequence=SignatureCache.Open("signature-win-author",SignatureAuthor,SignatureLeft-SignatureAuthorInk.X*SignatureAuthorPitch,SignatureAuthorTop-SignatureAuthorInk.Y*SignatureAuthorPitch,SignatureAuthorPitch,WindowsPixels.MonoGlyph,WindowsPixels.MonoAdvance),mottoSequence=SignatureCache.Open("signature-win-motto",SignatureMotto,SignatureLeft-SignatureMottoInk.X*SignatureMottoPitch,SignatureMottoTop-SignatureMottoInk.Y*SignatureMottoPitch,SignatureMottoPitch,WindowsPixels.MonoGlyph,WindowsPixels.MonoAdvance);
  static int MacInkHeight(string text){int top=99,bottom=-1;foreach(char ch in text){var rows=Macintosh.ReferenceFonts.Glyph(ch);for(int y=0;y<rows.Length;y++)if(rows[y].IndexOf('1')>=0){top=Math.Min(top,y);bottom=Math.Max(bottom,y);}}return Math.Max(1,bottom-top+1);}
  readonly Path signatureAuthor=new Path(),signatureMotto=new Path();readonly TranslateTransform signatureCaretShift=new TranslateTransform();
  double signatureTypingAt=double.NaN,signatureLastStroke=-100;int signatureAuthorCount=-1,signatureMottoCount=-1,signatureCaretLine=-1;
@@ -257,20 +258,18 @@ sealed class FluidView:Grid {
  }
 
  // Fixed per-character timings give a natural rhythm without frame-dependent randomness.
- static double StrokeDelay(string text,int i){return .09+((i*7+3)%5)*.022+(text[i]==' '?.085:0);}
- static int TypedCount(string text,double elapsed,out double duration){duration=0;int count=0;for(int i=0;i<text.Length;i++){duration+=StrokeDelay(text,i);if(elapsed>=duration)count++;}return count;}
  void UpdateSignature(double t){
- double elapsed=double.IsNaN(signatureTypingAt)?-1:t-signatureTypingAt,firstDuration,secondDuration;
- int first=TypedCount(SignatureAuthor,elapsed,out firstDuration);
- double secondElapsed=elapsed-firstDuration-.8;
- int second=TypedCount(SignatureMotto,secondElapsed,out secondDuration);
+ double elapsed=double.IsNaN(signatureTypingAt)?-1:t-signatureTypingAt;
+ int first=authorSequence.Count(elapsed);
+ double secondElapsed=elapsed-authorSequence.Duration-.8;
+ int second=mottoSequence.Count(secondElapsed);
  bool newline=secondElapsed>=0;
  bool changed=first!=signatureAuthorCount||second!=signatureMottoCount;
- if(first!=signatureAuthorCount){signatureAuthor.Data=PixelText(SignatureAuthor.Substring(0,first),SignatureLeft-SignatureAuthorInk.X*SignatureAuthorPitch,SignatureAuthorTop-SignatureAuthorInk.Y*SignatureAuthorPitch,SignatureAuthorPitch,false,true);signatureAuthorCount=first;signatureLastStroke=t;}
- if(second!=signatureMottoCount){signatureMotto.Data=PixelText(SignatureMotto.Substring(0,second),SignatureLeft-SignatureMottoInk.X*SignatureMottoPitch,SignatureMottoTop-SignatureMottoInk.Y*SignatureMottoPitch,SignatureMottoPitch,false,true);signatureMottoCount=second;signatureLastStroke=t;}
- int line=newline?1:0;changed=changed||signatureCaretLine!=line;if(changed){double pitch=newline?SignatureMottoPitch:SignatureAuthorPitch;string current=newline?SignatureMotto.Substring(0,second):SignatureAuthor.Substring(0,first);
+ if(first!=signatureAuthorCount){signatureAuthor.Data=authorSequence.Prefix(first);signatureAuthorCount=first;signatureLastStroke=t;}
+ if(second!=signatureMottoCount){signatureMotto.Data=mottoSequence.Prefix(second);signatureMottoCount=second;signatureLastStroke=t;}
+ int line=newline?1:0;changed=changed||signatureCaretLine!=line;if(changed){double pitch=newline?SignatureMottoPitch:SignatureAuthorPitch;
  if(signatureCaretLine!=line){signatureCaret.Data=Pixels(Stem(newline?SignatureMottoInk.Height:SignatureAuthorInk.Height),0,0,pitch);signatureCaretLine=line;}
- double x=SignatureLeft-(newline?SignatureMottoInk.X:SignatureAuthorInk.X)*pitch;foreach(char ch in current)x+=WindowsPixels.MonoAdvance(ch)*pitch;
+ double x=newline?mottoSequence.Pen(second):authorSequence.Pen(first);
  signatureCaretShift.X=x+pitch;signatureCaretShift.Y=newline?SignatureMottoTop:SignatureAuthorTop;}
  bool show=t-signatureLastStroke<.3||t%1.15<.575;
  signatureCaret.Visibility=show?Visibility.Visible:Visibility.Hidden;
@@ -284,7 +283,14 @@ sealed class FluidView:Grid {
  void AddMineLayer(){if(mineImages[0]==null)for(int i=0;i<4;i++)using(var b=Art.MineTexture(i))mineImages[i]=FromBitmap(b);WCanvas.SetLeft(mineBoard,Art.MineX);WCanvas.SetTop(mineBoard,Art.MineY);world.Children.Add(mineBoard);surfaceTiles.Add(new SurfaceTile{Visual=mineBoard,Bounds=new Rect(Art.MineX,Art.MineY,Art.MineSize,Art.MineSize)});SetMineState(0);}
  void SetMineState(int state){mineState=state;mineBoard.Source=mineImages[state];}
  struct BrushPoint {public Point P;public bool Down;public BrushPoint(double x,double y,bool down){P=new Point(x,y);Down=down;}}
- static readonly BrushPoint[] PaintRoute=MakePaintRoute();
+ static readonly BrushPoint[] PaintRoute=LoadPaintRoute();
+ static BrushPoint[] LoadPaintRoute(){
+ var bytes=DiskCache.Read("native-win-paint-route");if(bytes!=null)try{using(var r=new BinaryReader(new MemoryStream(bytes))){int count=r.ReadInt32();if(count<2||count>100000||bytes.Length!=4+count*17)throw new IOException();var result=new BrushPoint[count];for(int i=0;i<count;i++){double x=r.ReadDouble(),y=r.ReadDouble();bool down=r.ReadBoolean();if(double.IsNaN(x)||double.IsNaN(y)||x<0||x>2200||y<0||y>3040)throw new IOException();result[i]=new BrushPoint(x,y,down);}return result;}}catch(IOException){}
+ var route=MakePaintRoute();using(var stream=new MemoryStream()){using(var w=new BinaryWriter(stream)){w.Write(route.Length);foreach(var point in route){w.Write(point.P.X);w.Write(point.P.Y);w.Write(point.Down);}w.Flush();DiskCache.Write("native-win-paint-route",stream.ToArray());}}return route;
+ }
+ static readonly byte[] paintStampAlpha=MakePaintStamp();
+ static byte[] MakePaintStamp(){var bytes=DiskCache.Read("native-win-ink-stamp");if(bytes!=null&&bytes.Length==90)return bytes;bytes=new byte[90];for(int j=0;j<10;j++)for(int i=0;i<9;i++){double coverage=0;if(i<6&&j<6)coverage=(i==0||i==5?.7:1)*(j==0||j==5?.7:1);double sx=i-2.2,sy=j-3.8,shadow=Math.Max(0,Math.Min(sx+1,6-sx))*Math.Max(0,Math.Min(sy+1,6-sy));shadow=Math.Min(1,shadow)*.27;bytes[j*9+i]=(byte)(255*(coverage+shadow*(1-coverage)));}DiskCache.Write("native-win-ink-stamp",bytes);return bytes;}
+
  static BrushPoint[] MakePaintRoute(){var list=new List<BrushPoint>();
  // Four waving panes and the trailing pixels of the classic Windows flag.
  for(int row=0;row<2;row++)for(int col=0;col<2;col++){double x0=1600+col*76,x1=x0+63,y0=1894+row*79;for(int edge=0;edge<4;edge++)for(int i=0;i<=12;i++){double u=i/12.0,x=edge==0?Lerp(x0,x1,u):edge==1?x1:edge==2?Lerp(x1,x0,u):x0;double y=edge==0?y0:edge==1?y0+63*u:edge==2?y0+63:y0+63*(1-u);y+=12*Math.Sin((x-1600)*Math.PI*2/150);list.Add(new BrushPoint(x,y,edge!=0||i>0));}}
@@ -298,11 +304,7 @@ sealed class FluidView:Grid {
  void PaintStamp(Point p,ref Int32Rect dirty){
  int gx=(int)Math.Round(p.X/3)*3,gy=(int)Math.Round(p.Y/3)*3;long key=((long)gx<<32)|(uint)gy;if(!paintedCells.Add(key))return;
  int x=(gx-PaintOriginX)*2,y=(gy-PaintOriginY)*2;
- for(int j=0;j<10;j++)for(int i=0;i<9;i++){int xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=PaintPixels||yy>=PaintPixels)continue;double coverage=0;
- // Reproduce the existing six-pixel ink cell and its offset shadow in the tiny bitmap.
- if(i<6&&j<6)coverage=(i==0||i==5?.7:1)*(j==0||j==5?.7:1);
- double sx=i-2.2,sy=j-3.8,shadow=Math.Max(0,Math.Min(sx+1,6-sx))*Math.Max(0,Math.Min(sy+1,6-sy));shadow=Math.Min(1,shadow)*.27;
- byte alpha=(byte)(255*(coverage+shadow*(1-coverage)));int index=(yy*PaintPixels+xx)*4+3;if(alpha>paintBuffer[index])paintBuffer[index]=alpha;
+ for(int j=0;j<10;j++)for(int i=0;i<9;i++){int xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=PaintPixels||yy>=PaintPixels)continue;byte alpha=paintStampAlpha[j*9+i];int index=(yy*PaintPixels+xx)*4+3;if(alpha>paintBuffer[index])paintBuffer[index]=alpha;
  }
  var r=new Int32Rect(Math.Max(0,x),Math.Max(0,y),Math.Max(0,Math.Min(PaintPixels,x+9)-Math.Max(0,x)),Math.Max(0,Math.Min(PaintPixels,y+10)-Math.Max(0,y)));
  if(r.Width>0&&r.Height>0){if(dirty.IsEmpty||dirty.Width==0)dirty=r;else{int left=Math.Min(dirty.X,r.X),top=Math.Min(dirty.Y,r.Y),right=Math.Max(dirty.X+dirty.Width,r.X+r.Width),bottom=Math.Max(dirty.Y+dirty.Height,r.Y+r.Height);dirty=new Int32Rect(left,top,right-left,bottom-top);}}

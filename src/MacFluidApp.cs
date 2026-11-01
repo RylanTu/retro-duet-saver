@@ -82,6 +82,7 @@ sealed class FluidView:Grid {
  readonly ScaleTransform dialogScale=new ScaleTransform(1,1,505,330);readonly TranslateTransform dialogLift=new TranslateTransform();double dialogPopAt=double.NaN;bool dialogWasOpen=true;
  readonly TranslateTransform repeatShift=new TranslateTransform();readonly TranslateTransform volumeShift=new TranslateTransform();readonly TranslateTransform speedShift=new TranslateTransform();
  const string SignatureAuthor="By RylanTu",SignatureMotto="Passion for a better world";
+ static readonly RetroWindows.SignatureCache authorSequence=RetroWindows.SignatureCache.Open("signature-mac-author",SignatureAuthor,650,2620,7,Art.Glyph,Art.Advance),mottoSequence=RetroWindows.SignatureCache.Open("signature-mac-motto",SignatureMotto,650,2740,5,Art.Glyph,Art.Advance);
  readonly Path signatureAuthor=new Path(),signatureMotto=new Path();readonly TranslateTransform signatureCaretShift=new TranslateTransform();
  double signatureTypingAt=double.NaN,signatureLastStroke=-100;int signatureAuthorCount=-1,signatureMottoCount=-1,signatureCaretLine=-1;
  readonly Path signatureCaret=new Path();readonly Path repeatMarker=new Path();
@@ -262,20 +263,18 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  }
 
  // Fixed per-character timings give a natural rhythm without frame-dependent randomness.
- static double StrokeDelay(string text,int i){return .09+((i*7+3)%5)*.022+(text[i]==' '?.085:0);}
- static int TypedCount(string text,double elapsed,out double duration){duration=0;int count=0;for(int i=0;i<text.Length;i++){duration+=StrokeDelay(text,i);if(elapsed>=duration)count++;}return count;}
  void UpdateSignature(double t){
- double elapsed=double.IsNaN(signatureTypingAt)?-1:t-signatureTypingAt,firstDuration,secondDuration;
- int first=TypedCount(SignatureAuthor,elapsed,out firstDuration);
- double secondElapsed=elapsed-firstDuration-.8;
- int second=TypedCount(SignatureMotto,secondElapsed,out secondDuration);
+ double elapsed=double.IsNaN(signatureTypingAt)?-1:t-signatureTypingAt;
+ int first=authorSequence.Count(elapsed);
+ double secondElapsed=elapsed-authorSequence.Duration-.8;
+ int second=mottoSequence.Count(secondElapsed);
  bool newline=secondElapsed>=0;
  bool changed=first!=signatureAuthorCount||second!=signatureMottoCount;
- if(first!=signatureAuthorCount){signatureAuthor.Data=PixelText(SignatureAuthor.Substring(0,first),650,2620,7);signatureAuthorCount=first;signatureLastStroke=t;}
- if(second!=signatureMottoCount){signatureMotto.Data=PixelText(SignatureMotto.Substring(0,second),650,2740,5);signatureMottoCount=second;signatureLastStroke=t;}
- int line=newline?1:0;changed=changed||signatureCaretLine!=line;if(changed){double pitch=newline?5:7;string current=newline?SignatureMotto.Substring(0,second):SignatureAuthor.Substring(0,first);
+ if(first!=signatureAuthorCount){signatureAuthor.Data=authorSequence.Prefix(first);signatureAuthorCount=first;signatureLastStroke=t;}
+ if(second!=signatureMottoCount){signatureMotto.Data=mottoSequence.Prefix(second);signatureMottoCount=second;signatureLastStroke=t;}
+ int line=newline?1:0;changed=changed||signatureCaretLine!=line;if(changed){double pitch=newline?5:7;
  if(signatureCaretLine!=line){signatureCaret.Data=Pixels(new[]{"1","1","1","1","1","1","1","1","1"},0,0,pitch);signatureCaretLine=line;}
- double x=650;foreach(char ch in current)x+=Art.Advance(ch)*pitch;
+ double x=newline?mottoSequence.Pen(second):authorSequence.Pen(first);
  signatureCaretShift.X=x+pitch;signatureCaretShift.Y=newline?2740:2620;}
  bool show=t-signatureLastStroke<.3||t%1.15<.575;
  signatureCaret.Visibility=show?Visibility.Visible:Visibility.Hidden;
@@ -285,12 +284,13 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  // The dense preview must not stay a live vector path with thousands of subfigures.
  void AddPatternLayer(){
  if(patternFaces[0]==null)for(int state=0;state<4;state++){
+ patternFaces[state]=RetroWindows.DiskCache.Image("native-mac-pattern-"+state,1620,660);if(patternFaces[state]!=null)continue;
  var drawing=new DrawingVisual();using(var c=drawing.RenderOpen()){
  c.PushTransform(new MatrixTransform(new Matrix(1,0,0,1,-1155,-1800)));
  c.DrawGeometry(Brushes.White,null,PatternCells(state));c.Pop();
  }
  var bitmap=new RenderTargetBitmap(1620,660,192,192,PixelFormats.Pbgra32);bitmap.Render(drawing);bitmap.Freeze();
- patternFaces[state]=BakeInk(bitmap);
+ patternFaces[state]=BakeInk(bitmap);RetroWindows.DiskCache.SaveImage("native-mac-pattern-"+state,patternFaces[state]);
  }
  var layer=new WCanvas{Width=810,Height=330,IsHitTestVisible=false};
  layer.Children.Add(patternFace);

@@ -14,3 +14,6 @@ obj/
 *.wav
 settings.xml
 local-review/
+
+# Local renders, benchmark artifacts and cache files
+output/

@@ -8,9 +8,12 @@ static partial class ReferenceContent {
  public static BitmapSource CheckerTile(){var visual=new DrawingVisual();using(var dc=visual.RenderOpen()){foreach(var point in new[]{new System.Windows.Point(0,0),new System.Windows.Point(5,5)}){dc.DrawRectangle(System.Windows.Media.Brushes.Black,null,new System.Windows.Rect(point.X+.225,point.Y+.225,4.45,4.45));}}var image=new RenderTargetBitmap(20,20,192,192,PixelFormats.Pbgra32);image.Render(visual);image.Freeze();return Macintosh.FluidView.BakeInk(image);}
  static readonly Dictionary<int,BitmapSource> cache=new Dictionary<int,BitmapSource>();static readonly Queue<int> order=new Queue<int>();
  public static BitmapSource Image(int owner,int scene){int key=owner*100+scene;BitmapSource value;lock(cacheGate){if(cache.TryGetValue(key,out value))return value;}
+ value=DiskCache.Image("scene-"+key,2400,1600);
+ if(value==null){
  using(var art=new Painter(owner==0){LiveSliders=(owner==0&&scene==19)||(owner==1&&scene==21)})using(var bitmap=new Bitmap(2400,1600,System.Drawing.Imaging.PixelFormat.Format32bppPArgb)){using(var g=Graphics.FromImage(bitmap)){g.Clear(System.Drawing.Color.White);g.ScaleTransform(2,2);art.Draw(g,scene);}
  var data=bitmap.LockBits(new Rectangle(0,0,bitmap.Width,bitmap.Height),ImageLockMode.ReadOnly,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
  try{var raw=new byte[data.Stride*bitmap.Height];Marshal.Copy(data.Scan0,raw,0,raw.Length);for(int i=0;i<raw.Length;i+=4){byte a=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=0;raw[i+3]=a;}value=BitmapSource.Create(bitmap.Width,bitmap.Height,192,192,PixelFormats.Pbgra32,null,raw,data.Stride);value.Freeze();value=Macintosh.FluidView.BakeInk(value);}finally{bitmap.UnlockBits(data);}}
+ DiskCache.SaveImage("scene-"+key,value);}
  // A bounded two-card cache avoids retaining a second full desktop for every new scene.
  lock(cacheGate){BitmapSource existing;if(cache.TryGetValue(key,out existing))return existing;while(order.Count>=2)cache.Remove(order.Dequeue());cache[key]=value;order.Enqueue(key);}return value;
  }

@@ -1,7 +1,7 @@
 ﻿using System;using System.Windows;
 namespace RetroWindows {
 // Timed waypoints: arrive, settle, press, release. Coordinates use the untransformed scene canvas.
-static class ReferenceMotion {
+static partial class ReferenceMotion {
  public struct Sample {public Point Pointer;public Rect Button,Selection;public bool Down,Show;public int Digits,ViewState,PressedKey;public double SliderX,SliderY,DrawProgress;}
  static readonly System.Collections.Generic.Dictionary<int,Point[]> tracks=new System.Collections.Generic.Dictionary<int,Point[]>();static readonly double[] arrival={0,6.5,12.7,19};
  static readonly double[] charMapClicks={4.6,7.3,10,12.4,15,17.4,20};
@@ -11,7 +11,7 @@ static class ReferenceMotion {
  static Point Mix(Point a,Point b,double u){u=Ease(u);return new Point(a.X+(b.X-a.X)*u,a.Y+(b.Y-a.Y)*u);}
  public static Rect CalculatorButton(int owner,int i){int k=owner==0?macKeys[i]:winKeys[i];if(owner==1&&i==0)return new Rect(840,294,110,62);return owner==0?new Rect(86+(k%4)*260,298+(k/4)*83,246,72):new Rect(250+(k%6)*118,375+(k/6)*80,106,68);}
  static Point Center(Rect r){return new Point(r.X+r.Width*.5,r.Y+r.Height*.5);}
- public static Sample At(int owner,int scene,double age,double duration){var s=new Sample{Show=scene!=22&&scene!=7&&scene!=10&&scene!=12&&scene!=16&&!(owner==0&&scene==18),Pointer=new Point(1000,680),Button=Rect.Empty,Selection=Rect.Empty,SliderX=-1,SliderY=-1};double p=age/duration*24;
+ internal static Sample Evaluate(int owner,int scene,double age,double duration){var s=new Sample{Show=scene!=22&&scene!=7&&scene!=10&&scene!=12&&scene!=16&&!(owner==0&&scene==18),Pointer=new Point(1000,680),Button=Rect.Empty,Selection=Rect.Empty,SliderX=-1,SliderY=-1};double p=age/duration*24;
  if(scene==17){Point previous=new Point(owner==0?1040:990,650);for(int i=0;i<5;i++){double click=5.7+i*2.05;Rect button=CalculatorButton(owner,i);Point next=Center(button);if(p<click-.25){s.Pointer=Mix(previous,next,(p-(click-1.65))/1.4);return s;}s.Pointer=next;s.PressedKey=i;s.Down=p>=click&&p<click+.18;s.Button=button;if(p<click+.18)return s;s.Digits=i;previous=next;}s.Digits=4;s.Pointer=Mix(previous,new Point(1015,700),(p-16)/2);return s;}
  Point[] points;int trackKey=owner*100+scene;if(!tracks.TryGetValue(trackKey,out points)){
  if(scene==8)points=owner==0?new[]{new Point(690,210),new Point(840,417),new Point(840,515),new Point(1070,610)}:new[]{new Point(1010,650),new Point(853,220),new Point(430,465),new Point(730,550)};
