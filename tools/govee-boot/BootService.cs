@@ -157,7 +157,7 @@ namespace RetroDuetLighting {
          Send(udp,sender.Address,4003,White);Send(udp,sender.Address,4003,Bright);Send(udp,sender.Address,4003,On);
          if(attempt<2)cancel.WaitOne(60);
         }
-        File.WriteAllLines(Path.Combine(DataRoot,"last-discovered.txt"),new List<string>(devices).ToArray());
+        SaveHistory();
         Log("Boot white 5400 K / 100% sent to "+ip);
        }
       }catch(ArgumentException){}catch(InvalidOperationException){}
@@ -165,20 +165,49 @@ namespace RetroDuetLighting {
     }
    }
   }
+  internal static string[] SelectTargets(IEnumerable<string> current,IEnumerable<string> history,HashSet<string> filter) {
+   var result=new HashSet<string>(StringComparer.Ordinal);
+   foreach(var source in new[]{current,history})foreach(string raw in source){
+    IPAddress ip;if(!IPAddress.TryParse(raw==null?"":raw.Trim(),out ip)||ip.AddressFamily!=AddressFamily.InterNetwork)continue;
+    byte[] bytes=ip.GetAddressBytes();if(bytes[0]==0||bytes[0]>=224||IPAddress.IsLoopback(ip)||ip.Equals(IPAddress.Broadcast))continue;
+    string value=ip.ToString();if(filter.Count==0||filter.Contains(value))result.Add(value);
+   }
+   var targets=new List<string>(result);targets.Sort(StringComparer.Ordinal);return targets.ToArray();
+  }
+  internal static string[] ReadHistory(string path,Action<string> log) {
+   try{return File.Exists(path)?File.ReadAllLines(path):new string[0];}
+   catch(IOException error){log("History read failed: "+error.Message);}
+   catch(UnauthorizedAccessException error){log("History read failed: "+error.Message);}
+   return new string[0];
+  }
+  static string HistoryPath {get{return Path.Combine(DataRoot,"last-discovered.txt");}}
+  static void SaveHistory() {
+   try{var targets=SelectTargets(devices,ReadHistory(HistoryPath,Log),allowed);File.WriteAllLines(HistoryPath,targets);}
+   catch(IOException error){Log("History save failed: "+error.Message);}
+   catch(UnauthorizedAccessException error){Log("History save failed: "+error.Message);}
+  }
+  internal static bool TrySendOff(UdpClient udp,IPAddress ip,int port,out string error) {
+   try{byte[] bytes=Encoding.UTF8.GetBytes(Off);udp.Send(bytes,bytes.Length,new IPEndPoint(ip,port));error=null;return true;}
+   catch(SocketException ex){error=ex.SocketErrorCode+" ("+ex.ErrorCode+"): "+ex.Message;return false;}
+   catch(ObjectDisposedException ex){error=ex.Message;return false;}
+  }
   static void Finish(bool shutdown) {
    try {
     if(shutdown)try{File.WriteAllText(Marker,DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture));}catch(IOException error){Log(error.Message);}catch(UnauthorizedAccessException error){Log(error.Message);}
     if(bootWorker!=null)bootWorker.Join(1500);
-    string[] targets;lock(gate){targets=new List<string>(devices).ToArray();}
+    string[] current;lock(gate){current=new List<string>(devices).ToArray();}
+    string[] targets=SelectTargets(current,ReadHistory(HistoryPath,Log),allowed);
+    Log((shutdown?"System shutdown":"Service stop")+": current="+current.Length+", targets including history="+targets.Length+" ["+string.Join(", ",targets)+"].");
+    var failures=new HashSet<string>();int sent=0,failed=0;
     using(var udp=new UdpClient(AddressFamily.InterNetwork)){
      udp.Client.SendTimeout=100;
      // No bind to discovery port 4002 during shutdown. Repeat over ~2 seconds.
      for(int attempt=0;attempt<8&&targets.Length>0;attempt++){
-      foreach(string ip in targets)Send(udp,IPAddress.Parse(ip),4003,Off);
+      foreach(string ip in targets){string error;if(TrySendOff(udp,IPAddress.Parse(ip),4003,out error))sent++;else{failed++;if(failures.Add(ip))Log("Off UDP send failed for "+ip+": "+error);}}
       if(attempt<7)Thread.Sleep(250);
      }
     }
-    Log((shutdown?"System shutdown":"Service stop")+": off sent to "+targets.Length+" device(s).");
+    Log("Off UDP attempts: sent="+sent+", failed="+failed+". Device acknowledgement not checked.");
    }catch(Exception error){Log(error.ToString());}
    finally{Report(1,0);done.Set();}
   }
