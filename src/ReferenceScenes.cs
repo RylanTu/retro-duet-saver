@@ -1,6 +1,9 @@
-using System;using System.Drawing;
+﻿using System;using System.Drawing;
 namespace RetroWindows {static partial class ReferenceContent {sealed partial class Painter {
- void Label(Graphics g,string text,int x,int y,int w,int h,int p){int top=100,bottom=0,left=100000,right=0,advance=0;foreach(char c in text){string[] rows=Glyph(c,false);for(int j=0;j<rows.Length;j++)for(int i=0;i<rows[j].Length;i++)if(rows[j][i]=='1'){top=Math.Min(top,j);bottom=Math.Max(bottom,j+1);left=Math.Min(left,advance+i);right=Math.Max(right,advance+i+1);}advance+=Advance(c,false);}if(bottom>top)Text(g,text,x+(w-(right-left)*p)/2-left*p,y+(h-(bottom-top)*p)/2-top*p,p,false,black);}
+ void Label(Graphics g,string text,int x,int y,int w,int h,int p){int top=100,bottom=0,left=100000,right=0,advance=0;foreach(char c in text){string[] rows=Glyph(c,false);for(int j=0;j<rows.Length;j++)for(int i=0;i<rows[j].Length;i++)if(rows[j][i]=='1'){top=Math.Min(top,j);bottom=Math.Max(bottom,j+1);left=Math.Min(left,advance+i);right=Math.Max(right,advance+i+1);}advance+=Advance(c,false);}if(bottom<=top)return;
+ p=Math.Max(1,Math.Min(p,Math.Min(w/Math.Max(1,right-left),h/(bottom-top))));
+ var state=g.Save();g.IntersectClip(new Rectangle(x,y,w,h));
+ Text(g,text,x+(w-(right-left)*p)/2-left*p,y+(h-(bottom-top)*p)/2-top*p,p,false,black);g.Restore(state);}
  void Button(Graphics g,string text,int x,int y,int w,int h,int p){Box(g,x,y,w,h,false);Label(g,text,x+6,y+6,w-12,h-12,p);}
  void PixelEllipse(Graphics g,int cx,int cy,int rx,int ry,int pitch){var used=new System.Collections.Generic.HashSet<int>();for(int i=0;i<180;i++){double a=i*Math.PI/90;int x=(int)Math.Round((cx+Math.Cos(a)*rx)/pitch),y=(int)Math.Round((cy+Math.Sin(a)*ry)/pitch);if(used.Add(y*10000+x))Cell(g,x*pitch,y*pitch,pitch,black);}}
  void PaintWorkspace(Graphics g,bool patterns){Frame(g,mac?"Untitled - MacPaint":"untitled - Paint",mac?"File    Edit    Goodies    Font    FontSize    Style":"File    Edit    View    Image    Options    Help");

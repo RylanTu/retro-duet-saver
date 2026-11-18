@@ -1,4 +1,4 @@
-using System;using System.Reflection;using System.Windows;using System.Windows.Media;using System.Windows.Media.Effects;
+﻿using System;using System.Reflection;using System.Windows;using System.Windows.Media;using System.Windows.Media.Effects;
 namespace RetroWindows {
 sealed class PixelShrinkEffect:ShaderEffect {
  static readonly PixelShader shader=LoadShader();
@@ -15,10 +15,10 @@ sealed partial class SharedView {
  readonly System.Windows.Controls.Grid sceneHost=new System.Windows.Controls.Grid();
  readonly System.Windows.Shapes.Rectangle pixelSurface=new System.Windows.Shapes.Rectangle{IsHitTestVisible=false,Visibility=Visibility.Hidden};
  VisualBrush pixelSource;PixelShrinkEffect pixelTransition;
- void InitializePixelSurface(){pixelSource=new VisualBrush(sceneLayer){AutoLayoutContent=false,ViewboxUnits=BrushMappingMode.Absolute,Stretch=Stretch.Fill};pixelSurface.Fill=pixelSource;sceneHost.Children.Add(sceneLayer);Children.Add(sceneHost);Children.Add(pixelSurface);}
+ void InitializePixelSurface(){pixelSource=new VisualBrush(sceneLayer){AutoLayoutContent=false,ViewboxUnits=BrushMappingMode.Absolute,Stretch=Stretch.Fill};sceneHost.Children.Add(sceneLayer);Children.Add(sceneHost);Children.Add(pixelSurface);}
  void UpdatePixelTransition(Matrix camera,Shot shot,double age,bool blank,double progress){
  if(!PixelShrinkEffect.Available)return;
- if(blank||progress>=1){pixelSurface.Visibility=Visibility.Hidden;pixelSurface.Effect=null;pixelSurface.Fill=null;sceneHost.Opacity=1;return;}
+ if(blank||progress>=1){if(pixelSurface.Visibility!=Visibility.Visible)return;pixelSurface.Visibility=Visibility.Hidden;pixelSurface.Effect=null;pixelSurface.Fill=null;sceneHost.Opacity=1;return;}
  if(pixelTransition==null)pixelTransition=new PixelShrinkEffect();
  // Match the broad spatial progression to the existing entry/exit direction.
  Point direction;switch(transitionKind){case 1:direction=new Point(-1,1);break;case 2:direction=new Point(1,0);break;case 3:case 8:direction=new Point(0,-1);break;case 7:direction=new Point(-1,0);break;case 4:direction=new Point(-1,-1);break;default:direction=new Point(1,1);break;}

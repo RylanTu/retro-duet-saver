@@ -1,77 +1,69 @@
-param([ValidateSet('Install','Uninstall')][string]$Action='Install')
+﻿param([ValidateSet('Install','Uninstall')][string]$Action='Install')
 $ErrorActionPreference='Stop'
 $serviceName='RetroDuetLighting'
 $installRoot=Join-Path $env:ProgramFiles 'RetroDuetLighting'
 $dataRoot=Join-Path $env:ProgramData 'RetroDuetLighting'
 $exePath=Join-Path $installRoot 'RetroDuetLighting.exe'
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
-$principal=New-Object Security.Principal.WindowsPrincipal($identity)
-if(!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
- try{
-  $process=Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Action',$Action) -Verb RunAs -WindowStyle Hidden -Wait -PassThru
-  if($process.ExitCode -ne 0){throw "Installer failed. See $env:TEMP\RetroDuetLighting-Install.log"}
-  Write-Host "$Action completed."
-  exit 0
- }catch{Write-Error $_;exit 1}
+if(!([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+ $pwsh=(Get-Process -Id $PID).Path
+ $p=Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile','-File',('"'+$PSCommandPath+'"'),'-Action',$Action) -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+ exit $p.ExitCode
 }
-Start-Transcript -Path (Join-Path $env:TEMP 'RetroDuetLighting-Install.log') -Append | Out-Null
+Start-Transcript -Path (Join-Path $env:TEMP 'RetroDuetLighting-Unified-Install.log') -Append | Out-Null
+$wasRunning=$false
+$previousAcl=$null
+$replaced=$false
 try{
- $existing=Get-WmiObject Win32_Service -Filter "Name='RetroDuetLighting'"
- if($existing -and $existing.PathName.Trim('"') -ine $exePath){throw 'A different service uses this name. Refusing to overwrite it.'}
- if($existing){
-  $svc=Get-Service -Name $serviceName
-  if($svc.Status -ne 'Stopped'){Stop-Service -Name $serviceName;$svc.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(10))}
+ foreach($path in @($installRoot,$dataRoot)){
+  $item=Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+  if($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Installation and data directories must not be redirected'}
  }
+ $existing=Get-CimInstance Win32_Service -Filter "Name='RetroDuetLighting'"
+ if($existing -and $existing.PathName.Trim('"') -ine $exePath){throw 'Different service uses this name'}
+ if($existing){$svc=Get-Service $serviceName;$wasRunning=$svc.Status -eq 'Running';if($svc.Status -ne 'Stopped'){Stop-Service $serviceName;$svc.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(15))}}
  if($Action -eq 'Uninstall'){
-  if($existing){& "$env:SystemRoot\System32\sc.exe" delete $serviceName;if($LASTEXITCODE -ne 0){throw 'Service deletion failed'}}
+  if($existing){& sc.exe delete $serviceName;if($LASTEXITCODE){throw 'Service deletion failed'}}
   Get-NetFirewallRule -Name 'RetroDuetLighting.Discovery' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-  # Only named files are removed. Preserve configuration, discovery history and logs.
-  if([IO.Path]::GetFullPath($installRoot) -ine [IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'RetroDuetLighting'))){throw 'Unexpected installation path'}
-  $item=Get-Item -LiteralPath $installRoot -ErrorAction SilentlyContinue
-  if($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Refusing to modify a redirected installation folder'}
-  $installedExe=Join-Path $installRoot 'RetroDuetLighting.exe'
-  if(Test-Path -LiteralPath $installedExe){Remove-Item -LiteralPath $installedExe -Force}
-  Write-Host 'Removed service and firewall rule. Settings and logs were kept.'
+  if(Test-Path -LiteralPath $exePath){Remove-Item -LiteralPath $exePath -Force}
+  Write-Host 'Unified lighting service removed; settings and recovery data retained.'
  }else{
-  $sourceExe=Join-Path $PSScriptRoot 'RetroDuetLighting.exe'
-  if(!(Test-Path -LiteralPath $sourceExe)){throw 'Extract the complete ZIP before installing.'}
+  $source=Join-Path $PSScriptRoot 'RetroDuetLighting.exe'
+  if(!(Test-Path -LiteralPath $source)){throw 'Extract the complete test package'}
   New-Item -ItemType Directory -Path $installRoot,$dataRoot -Force | Out-Null
-  if((Get-Item -LiteralPath $installRoot).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Installation directory must not be redirected'}
-  if((Get-Item -LiteralPath $dataRoot).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Data directory must not be redirected'}
-  & "$env:SystemRoot\System32\icacls.exe" $dataRoot /grant '*S-1-5-19:(OI)(CI)M' | Out-Null
-  if($LASTEXITCODE -ne 0){throw 'Cannot grant LocalService data access'}
-  if([IO.Path]::GetFullPath($sourceExe) -ine [IO.Path]::GetFullPath($exePath)){Copy-Item -LiteralPath $sourceExe -Destination $exePath -Force}
-  $config=Join-Path $installRoot 'settings.json'
-  if(!(Test-Path -LiteralPath $config)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'settings.json') -Destination $config}
+  if(Test-Path -LiteralPath $exePath){Copy-Item -LiteralPath $exePath -Destination ($exePath+'.previous') -Force}
+  Copy-Item -LiteralPath $source -Destination $exePath -Force
+  $replaced=$true
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot "engine_worker.py") -Destination $installRoot -Force
+  if(!(Test-Path -LiteralPath (Join-Path $installRoot "runtime"))){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "runtime") -Destination $installRoot -Recurse}
+
+  if(!(Test-Path -LiteralPath (Join-Path $installRoot 'settings.json'))){Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'settings.json') -Destination $installRoot}
+  # Recovery state is written only by the service and administrators.
+  $previousAcl=Get-Acl -LiteralPath $dataRoot
+  $acl=Get-Acl -LiteralPath $dataRoot
+  $acl.SetAccessRuleProtection($true,$false)
+  foreach($sid in @('S-1-5-18','S-1-5-32-544')){$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
+  $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow'))
+  Set-Acl -LiteralPath $dataRoot -AclObject $acl
+  if(!$existing){New-Service -Name $serviceName -BinaryPathName ('"'+$exePath+'"') -DisplayName 'Retro Duet Lighting' -StartupType Automatic -DependsOn Tcpip | Out-Null}
+  else{& sc.exe config $serviceName obj= LocalSystem start= auto;if($LASTEXITCODE){throw 'Cannot update unified service account'}}
+  & sc.exe description $serviceName 'Govee boot/shutdown lighting and Lenovo official screensaver sync.' | Out-Null
+  & $exePath --configure;if($LASTEXITCODE){throw 'Cannot configure shutdown recovery timeout'}
   Get-NetFirewallRule -Name 'RetroDuetLighting.Discovery' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
   New-NetFirewallRule -Name 'RetroDuetLighting.Discovery' -DisplayName 'Retro Duet Lighting - Govee LAN discovery' -Direction Inbound -Action Allow -Program $exePath -Protocol UDP -LocalPort 4002 -RemoteAddress LocalSubnet -Profile Private,Domain | Out-Null
-  if(!$existing){
-   $class=[wmiclass]'\\.\root\cimv2:Win32_Service'
-   $parameters=$class.GetMethodParameters('Create')
-   $parameters.Name=$serviceName
-   $parameters.DisplayName='Retro Duet Lighting'
-   $parameters.PathName='"'+$exePath+'"'
-   $parameters.ServiceType=16
-   $parameters.ErrorControl=1
-   $parameters.StartMode='Automatic'
-   $parameters.DesktopInteract=$false
-   $parameters.StartName='NT AUTHORITY\LocalService'
-   $parameters.ServiceDependencies=@('Tcpip')
-   $result=$class.InvokeMethod('Create',$parameters,$null)
-   if($result.ReturnValue -ne 0){throw ('Service creation failed: '+$result.ReturnValue)}
-  }else{Set-Service -Name $serviceName -StartupType Automatic}
-  & "$env:SystemRoot\System32\sc.exe" description $serviceName 'Govee LAN: 5400 K / 100% at boot; off at normal shutdown. No cloud account.' | Out-Null
-  if($LASTEXITCODE -ne 0){throw 'Cannot set service description'}
-  & $exePath --configure
-  if($LASTEXITCODE -ne 0){throw 'Cannot configure preshutdown timeout'}
-  Start-Service -Name $serviceName
-  (Get-Service -Name $serviceName).WaitForStatus('Running',[TimeSpan]::FromSeconds(10))
-  Write-Host 'Installed and started. Background operation has no visible window.'
+  Start-Service $serviceName
+  (Get-Service $serviceName).WaitForStatus('Running',[TimeSpan]::FromSeconds(10))
+  Write-Host 'Unified service installed. Screensaver runs without elevation.'
  }
- Stop-Transcript | Out-Null
- exit 0
 }catch{
- Write-Output $_
- try{Stop-Transcript | Out-Null}catch{}
- exit 1
-}
+ if($Action -eq 'Install' -and $existing){
+  try{
+   Stop-Service $serviceName -ErrorAction SilentlyContinue
+   if($replaced -and (Test-Path -LiteralPath ($exePath+'.previous'))){Copy-Item -LiteralPath ($exePath+'.previous') -Destination $exePath -Force}
+   if($previousAcl){Set-Acl -LiteralPath $dataRoot -AclObject $previousAcl}
+   & sc.exe config $serviceName obj= $existing.StartName | Out-Null
+   if($wasRunning){Start-Service $serviceName}
+  }catch{Write-Warning ('Previous service restore needs attention: '+$_)}
+ }
+ throw
+}finally{Stop-Transcript | Out-Null}

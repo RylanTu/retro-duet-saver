@@ -1,21 +1,22 @@
-using System;using System.Collections.Generic;using System.Drawing;using System.Drawing.Drawing2D;using System.Drawing.Imaging;using System.Globalization;using System.IO;using System.Windows.Forms;using System.Xml.Serialization;
+﻿using System;using System.Collections.Generic;using System.Drawing;using System.Drawing.Drawing2D;using System.Drawing.Imaging;using System.Globalization;using System.IO;using System.Windows.Forms;using System.Xml.Serialization;
 namespace RetroWindows {
 public class Options {
  public int FrameRate=144; public bool Cinematic=true; public int Palette=0,Speed=100; public bool Clock=false,Seconds=false,Chinese=true,Animate=true;
  public bool GoveeLighting=false;
+ public bool LenovoLighting=false;
  public int GoveeSaturation=165;
  public static string FileName { get {return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RetroDuetSaver","settings.xml");} }
  public static Options Load(){try{using(var s=File.OpenRead(FileName)){var o=(Options)new XmlSerializer(typeof(Options)).Deserialize(s);o.Palette=Math.Max(0,Math.Min(16,o.Palette));o.Speed=Math.Max(25,Math.Min(200,o.Speed));o.GoveeSaturation=Math.Max(0,Math.Min(300,o.GoveeSaturation));return o;}}catch{return new Options();}}
  public void Save(){Directory.CreateDirectory(Path.GetDirectoryName(FileName));using(var s=File.Create(FileName))new XmlSerializer(typeof(Options)).Serialize(s,this);}
 }
 sealed class Settings:Form {
- Options o=Options.Load();ComboBox frameRate; CheckBox cinematic;ComboBox palette;TrackBar speed,goveeSaturation;CheckBox animate,goveeLighting;
- public Settings(){Text="Mac × Windows · 屏保设置";ClientSize=new Size(470,688);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);BackColor=Color.FromArgb(245,244,239);
+ Options o=Options.Load();ComboBox frameRate; CheckBox cinematic;ComboBox palette;TrackBar speed,goveeSaturation;CheckBox animate,goveeLighting,lenovoLighting;
+ public Settings(){Text="Mac × Windows · 屏保设置";ClientSize=new Size(470,760);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);BackColor=Color.FromArgb(245,244,239);
  Controls.Add(new Label{Text="Mac × Windows",Font=new Font("Segoe UI",26,FontStyle.Bold),Bounds=new Rectangle(26,18,410,48)});Controls.Add(new Label{Text="经典界面 · 消散转场 · 逐字签名",Bounds=new Rectangle(28,70,420,28),ForeColor=Color.DimGray});Controls.Add(new Label{Text="配色",Bounds=new Rectangle(28,116,90,28)});
  palette=new ComboBox{Bounds=new Rectangle(128,112,300,32),DropDownStyle=ComboBoxStyle.DropDownList};palette.Items.AddRange(new object[]{"单色背景缓慢变色 / 约 3 分钟一圈","琥珀黄","酒红","紫罗兰","青绿","橄榄绿","经典灰","橙","朱红","洋红","紫红","靛蓝","蓝","湖蓝","草绿","柠檬黄","金黄"});palette.SelectedIndex=o.Palette;Controls.Add(palette);
  Controls.Add(new Label{Text="动画速度",Bounds=new Rectangle(28,168,96,28)});speed=new TrackBar{Bounds=new Rectangle(122,158,310,45),Minimum=25,Maximum=200,TickFrequency=25,Value=o.Speed};Controls.Add(speed);
  animate=Check("缓慢镜头漫游",28,214,o.Animate);Controls.Add(new Label{Text="日期时间仅保留在背景像素面板中",Bounds=new Rectangle(28,260,405,28),ForeColor=Color.DimGray});
- Controls.Add(new Label{Text="F11 全屏 · 空格换色 · S 设置 · F2 帧率\nA 自动鼠标 · P 暂停 · Esc 退出",Bounds=new Rectangle(28,550,420,50),ForeColor=Color.DimGray});Controls.Add(new Label{Text="目标帧率",Bounds=new Rectangle(28,309,90,28)}); frameRate=new ComboBox{Bounds=new Rectangle(128,305,300,32),DropDownStyle=ComboBoxStyle.DropDownList};frameRate.Items.AddRange(new object[]{"60 FPS","120 FPS","144 FPS"});frameRate.SelectedIndex=o.FrameRate>=144?2:o.FrameRate>=120?1:0;Controls.Add(frameRate);cinematic=Check("自动鼠标与拖拽演出",28,350,o.Cinematic);
+ Controls.Add(new Label{Text="F11 全屏 · 空格换色 · S 设置 · F2 帧率\nA 自动鼠标 · P 暂停 · Esc 退出",Bounds=new Rectangle(28,634,420,50),ForeColor=Color.DimGray});Controls.Add(new Label{Text="目标帧率",Bounds=new Rectangle(28,309,90,28)}); frameRate=new ComboBox{Bounds=new Rectangle(128,305,300,32),DropDownStyle=ComboBoxStyle.DropDownList};frameRate.Items.AddRange(new object[]{"60 FPS","120 FPS","144 FPS"});frameRate.SelectedIndex=o.FrameRate>=144?2:o.FrameRate>=120?1:0;Controls.Add(frameRate);cinematic=Check("自动鼠标与拖拽演出",28,350,o.Cinematic);
  goveeLighting=Check("Govee 灯带随屏保变色（可选）",28,391,o.GoveeLighting);goveeLighting.Width=410;
  var saturationLabel=new Label{Text="灯带饱和度",Bounds=new Rectangle(28,438,96,28),Enabled=o.GoveeLighting};Controls.Add(saturationLabel);
  goveeSaturation=new TrackBar{Bounds=new Rectangle(122,428,256,50),Minimum=0,Maximum=300,TickFrequency=50,SmallChange=5,LargeChange=25,Value=o.GoveeSaturation,Enabled=o.GoveeLighting,AccessibleName="灯带饱和度百分比"};Controls.Add(goveeSaturation);
@@ -23,12 +24,15 @@ sealed class Settings:Form {
  goveeSaturation.ValueChanged+=delegate{saturationValue.Text=goveeSaturation.Value.ToString(CultureInfo.InvariantCulture)+"%";};
  goveeLighting.CheckedChanged+=delegate{goveeSaturation.Enabled=saturationLabel.Enabled=saturationValue.Enabled=goveeLighting.Checked;};
  Controls.Add(new Label{Text="100% 为原始颜色，165% 为当前浓郁效果。\n需启用灯带 LAN Control；下次屏保启动生效。\n满半小时关灯，提前退出恢复 5400K / 100%。",Bounds=new Rectangle(28,482,420,60),ForeColor=Color.DimGray});
- var save=new Button{Text="保存设置",Bounds=new Rectangle(296,623,132,38)};save.Click+=delegate{o.FrameRate=new[]{60,120,144}[frameRate.SelectedIndex];o.Cinematic=cinematic.Checked;o.Palette=palette.SelectedIndex;o.Speed=speed.Value;o.Clock=false;o.Animate=animate.Checked;o.GoveeLighting=goveeLighting.Checked;o.GoveeSaturation=goveeSaturation.Value;try{o.Save();DialogResult=DialogResult.OK;Close();}catch(Exception ex){MessageBox.Show(this,ex.Message,"无法保存设置");}};Controls.Add(save);AcceptButton=save;
+ lenovoLighting=Check("联想键盘与机身：官方屏幕同步",28,550,o.LenovoLighting);lenovoLighting.Width=420;
+ Controls.Add(new Label{Text="首次安装统一灯光组件后，日常无需管理员权限。\n退出恢复原第一档，与 Govee 灯带分别开关。",Bounds=new Rectangle(28,586,420,44),ForeColor=Color.DimGray});
+ var save=new Button{Text="保存设置",Bounds=new Rectangle(296,703,132,38)};save.Click+=delegate{o.FrameRate=new[]{60,120,144}[frameRate.SelectedIndex];o.Cinematic=cinematic.Checked;o.Palette=palette.SelectedIndex;o.Speed=speed.Value;o.Clock=false;o.Animate=animate.Checked;o.GoveeLighting=goveeLighting.Checked;o.LenovoLighting=lenovoLighting.Checked;o.GoveeSaturation=goveeSaturation.Value;try{o.Save();DialogResult=DialogResult.OK;Close();}catch(Exception ex){MessageBox.Show(this,ex.Message,"无法保存设置");}};Controls.Add(save);AcceptButton=save;
  }
  CheckBox Check(string t,int x,int y,bool v){var c=new CheckBox{Text=t,Bounds=new Rectangle(x,y,205,30),Checked=v};Controls.Add(c);return c;}
 }
 
 sealed class Art:IDisposable {
+ internal static readonly Rectangle BlinkPreview=new Rectangle(1900,579,75,57);
  public const int P=3,SoundTrackX=760,SoundTrackY=1170,SoundTrackHeight=180,SoundTravel=159;
  public const int MineX=452,MineY=1894,MineCell=48,MineSize=384;
  static readonly Color Silver=Color.White,Gray=Color.FromArgb(145,145,145),White=Color.White,Black=Color.Black;
@@ -40,7 +44,7 @@ sealed class Art:IDisposable {
  void Text(Graphics g,string s,int x,int y,int p,Color c){foreach(char ch in s){Sprite(g,WindowsPixels.Glyph(ch),x,y,p,c);x+=WindowsPixels.Advance(ch)*p;}}
  void Bold(Graphics g,string s,int x,int y,Color c){foreach(char ch in s){Sprite(g,WindowsPixels.BoldGlyph(ch),x,y,P,c);x+=WindowsPixels.BoldAdvance(ch)*P;}}
  int Width(string s){int w=0;foreach(char c in s)w+=WindowsPixels.Advance(c)*P;return w;}
- void Label(Graphics g,string s,int x,int y,int w,int h,bool bold,bool center){var b=WindowsPixels.Bounds(s,bold);int tx=center?x+(w-b.Width*P)/2-b.X*P:x;int ty=y+(h-b.Height*P)/2-b.Y*P;if(bold)Bold(g,s,tx,ty,Black);else Text(g,s,tx,ty,P,Black);}
+ void Label(Graphics g,string s,int x,int y,int w,int h,bool bold,bool center){var b=WindowsPixels.Bounds(s,bold);int tx=center?x+(w-b.Width*P)/2-b.X*P:x;int ty=y+(h-b.Height*P)/2-b.Y*P;var saved=g.Save();g.IntersectClip(new Rectangle(x,y,w,h));if(bold)Bold(g,s,tx,ty,Black);else Text(g,s,tx,ty,P,Black);g.Restore(saved);}
  void Line(Graphics g,int x,int y,int xx,int yy,Color c){if(y==yy)for(int n=x;n<xx;n+=P)Cell(g,n,y,P,c);else for(int n=y;n<yy;n+=P)Cell(g,x,n,P,c);}
  void Edge(Graphics g,int x,int y,int w,int h,Color top,Color bottom){Line(g,x,y,x+w,y,top);Line(g,x,y,x,y+h,top);Line(g,x,y+h-P,x+w,y+h-P,bottom);Line(g,x+w-P,y,x+w-P,y+h,bottom);}
  void Bevel(Graphics g,int x,int y,int w,int h,bool inset,Color face){Fill(g,face,x,y,w,h);Edge(g,x,y,w,h,inset?Gray:Color.FromArgb(210,210,210),inset?Color.FromArgb(210,210,210):Black);Edge(g,x+P,y+P,w-2*P,h-2*P,inset?Black:Silver,inset?Silver:Gray);}
@@ -82,7 +86,7 @@ sealed class Art:IDisposable {
  Window(g,1065,65,1010,720,"Keyboard Properties",2);Tabs(g,1098,155,944,507,"Speed","Language");
  Group(g,1125,237,888,300,"Character repeat");Text(g,"Repeat delay:",1155,282,P,Black);Text(g,"Long",1425,282,P,Black);Text(g,"Short",1885,282,P,Black);Slider(g,1430,327,500,.65);
  Text(g,"Repeat rate:",1155,393,P,Black);Text(g,"Slow",1425,393,P,Black);Text(g,"Fast",1895,393,P,Black);Slider(g,1430,438,500,.7);
- Group(g,1125,552,888,93,"Cursor blink rate");Text(g,"None",1155,594,P,Black);Text(g,"Fast",1785,594,P,Black);Bevel(g,1320,616,450,12,true,White);Bevel(g,1900,579,75,57,true,White);Actions(g,1065,695,1010);
+ Group(g,1125,552,888,93,"Cursor blink rate");Text(g,"None",1155,594,P,Black);Text(g,"Fast",1785,594,P,Black);Bevel(g,1320,616,450,12,true,White);Bevel(g,BlinkPreview.X,BlinkPreview.Y,BlinkPreview.Width,BlinkPreview.Height,true,White);Actions(g,1065,695,1010);
  Window(g,70,855,930,660,"Volume Control",0);Menu(g,94,927,"Options","Help");
  string[] names={"Volume Control","Wave","CD Audio"};for(int i=0;i<3;i++){int x=112+i*280;Label(g,names[i],x,990,255,48,false,true);Text(g,"Balance",x+54,1053,P,Black);Slider(g,x+45,1100,174,.5);Text(g,"L",x+12,1104,P,Black);Text(g,"R",x+228,1104,P,Black);int center=200+i*280;Track(g,center,SoundTrackY,SoundTrackHeight);if(i<2)Bevel(g,center-19,1230-i*30,39,21,false,White);Bevel(g,x+12,1410,39,39,true,White);Label(g,i==0?"Mute all":"Mute",x+66,1407,183,48,false,false);if(i<2)Line(g,x+267,990,x+267,1464,Gray);}
  Mines(g);if(!FluidApp.WithoutPaint)Paint(g);Notepad(g);Taskbar(g);

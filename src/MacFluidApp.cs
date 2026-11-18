@@ -120,7 +120,9 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  static readonly int[] LightCameraRegions={0,1,3,6,4,2};
 
  public FluidView(Options options,bool saver,bool embedded,SolidColorBrush commonPaper=null){if(commonPaper!=null)paper=commonPaper;Options=options;ink.Freeze();this.saver=saver;this.embedded=embedded;Hint=!saver&&!embedded;ClipToBounds=true;Background=paper;Cursor=Cursors.None;world.RenderTransform=camera;world.HorizontalAlignment=HorizontalAlignment.Left;world.VerticalAlignment=VerticalAlignment.Top;
- bool createdMaterials=desktopMaterials==null;if(createdMaterials)CreateMaterials();AddSurface(world,desktopMaterials,0,0);
+ bool createdMaterials=desktopMaterials==null;if(createdMaterials)CreateMaterials();
+ if(commonPaper==null)AddSurface(world,desktopMaterials,0,0);
+ else{var panels=RetroWindows.SharedView.NativePaper(paper,true);world.Children.Add(panels);AddSurface(panels,desktopMaterials,0,0);}
  AddPath(signatureAuthor);AddPath(signatureMotto);AddPath(signatureCaret);signatureCaret.RenderTransform=signatureCaretShift;
  UpdateSignature(0);
  if(!FluidApp.WithoutPattern)AddPatternLayer();keyPress.Fill=ink;WCanvas.SetLeft(keyPress,265);WCanvas.SetTop(keyPress,1830);world.Children.Add(keyPress);AddPath(repeatMarker);repeatMarker.RenderTransform=repeatShift;repeatMarker.Data=Pixels(new[]{"1111","1111","1111","1111","1111","1111"},700,1905,5);
@@ -128,7 +130,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  selectedClock.Data=Pixels(new[]{"1111","1111","1111","1111"},0,0,6);selectedClock.RenderTransform=new TranslateTransform(562,552);
  selectedRate.Data=selectedClock.Data;selectedRate.RenderTransform=new TranslateTransform(1487,367);
  volumeKnob=Knob(98,42);volumeKnob.RenderTransform=volumeShift;volumeShift.X=Art.SoundTrackX-7;world.Children.Add(volumeKnob);speedKnob=Knob(56,24);speedKnob.RenderTransform=speedShift;speedShift.X=1786;speedShift.Y=616;world.Children.Add(speedKnob);
- dialog.Background=paper;var dialogTransforms=new TransformGroup();dialogTransforms.Children.Add(dialogScale);dialogTransforms.Children.Add(dialogLift);dialogTransforms.Children.Add(dialogShift);dialog.RenderTransform=dialogTransforms;AddSurface(dialog,dialogMaterials,1065,855);world.Children.Add(dialog);
+ dialog.Children.Add(new Rectangle{Width=1010,Height=660,Fill=paper});var dialogTransforms=new TransformGroup();dialogTransforms.Children.Add(dialogScale);dialogTransforms.Children.Add(dialogLift);dialogTransforms.Children.Add(dialogShift);dialog.RenderTransform=dialogTransforms;AddSurface(dialog,dialogMaterials,1065,855);world.Children.Add(dialog);
  restartPress.Width=261;restartPress.Height=68;restartPress.Fill=ink;restartPress.Opacity=.24;WCanvas.SetLeft(restartPress,657);WCanvas.SetTop(restartPress,549);dialog.Children.Add(restartPress);
  var cursorGroup=new WCanvas{Width=64,Height=76};var cursorShadow=new Path{Data=Pixels(CursorPixels,2,3,4),Fill=ink,Opacity=.22};cursorGroup.Children.Add(cursorShadow);cursorGroup.Children.Add(new Path{Data=Pixels(CursorPixels,0,0,4),Fill=ink});pointer=cursorGroup;pointer.RenderTransform=cursorShift;world.Children.Add(pointer);Children.Add(world);var glow=new RadialGradientBrush{Center=new Point(.42,.3),GradientOrigin=new Point(.42,.3),RadiusX=.78,RadiusY=.95};glow.GradientStops.Add(new GradientStop(Color.FromArgb(29,255,248,221),0));glow.GradientStops.Add(new GradientStop(Color.FromArgb(6,255,248,221),.55));glow.GradientStops.Add(new GradientStop(Colors.Transparent,1));glow.Freeze();Children.Add(new Rectangle{Fill=glow,IsHitTestVisible=false});var shade=new LinearGradientBrush(Color.FromArgb(0,0,0,0),Color.FromArgb(15,0,0,0),90);shade.Freeze();Children.Add(new Rectangle{Fill=shade,IsHitTestVisible=false});
  hintLabel.Text="F11 全屏   ·   空格 换色   ·   A 自动鼠标   ·   S 设置   ·   F2 帧率";hintLabel.Foreground=light;hintLabel.FontSize=12;hintLabel.HorizontalAlignment=HorizontalAlignment.Center;hintLabel.VerticalAlignment=VerticalAlignment.Bottom;hintLabel.Margin=new Thickness(12,0,12,16);Children.Add(hintLabel);
@@ -190,6 +192,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  static BitmapSource Mask(bool dialog){using(var b=Art.Texture(dialog)){var rect=new Drawing.Rectangle(0,0,b.Width,b.Height);var data=b.LockBits(rect,Drawing.Imaging.ImageLockMode.ReadOnly,Drawing.Imaging.PixelFormat.Format32bppPArgb);try{var raw=new byte[data.Stride*b.Height];Marshal.Copy(data.Scan0,raw,0,raw.Length);for(int i=0;i<raw.Length;i+=4){byte alpha=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=raw[i+3]=alpha;}var image=BitmapSource.Create(b.Width,b.Height,192,192,PixelFormats.Pbgra32,null,raw,data.Stride);image.Freeze();return image;}finally{b.UnlockBits(data);}}}
 
  bool compositeMode;double nextCull=-1,nextActor=-1;int lastCompositeScene=-2;Rect lastCullRect;
+ internal BitmapSource DesktopInk { get { return desktopMaterials[0].Image; } }
  public WCanvas DetachWorld(){compositeMode=true;Children.Remove(world);world.RenderTransform=Transform.Identity;world.Children.Remove(pointer);return world;}
  public FrameworkElement CursorVisual{get{return pointer;}}
  public string FrameState{get{return string.Format(CultureInfo.InvariantCulture,"scene={0}, cursor=({1:F2},{2:F2}), dialog=({3:F2},{4:F2}), open={5}, volume_grip=({6:F2},{7:F2})",priorScene,cursorShift.X,cursorShift.Y,dialogX,dialogY,dialogOpen,volumeShift.X+50,volumeShift.Y+20);}}
@@ -214,7 +217,7 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  // Oklab interpolation keeps perceived lightness consistent through long color fades.
  struct Lab {public double L,A,B;public Lab(double l,double a,double b){L=l;A=a;B=b;}}
  static readonly Lab[] BgLabs=MakeLabs(Bg);static readonly Lab[] SpectrumLabs=MakeLabs(ReferenceSpectrum);
- static Lab[] MakeLabs(Color[] colors){var labs=new Lab[colors.Length];for(int i=0;i<labs.Length;i++)labs[i]=ToLab(colors[i]);return labs;}
+ static Lab[] MakeLabs(Color[] colors){var labs=new Lab[colors.Length];for(int i=0;i<labs.Length;i++){var lab=ToLab(colors[i]);lab.L+=.17*Math.Max(0,.77-lab.L);labs[i]=lab;}return labs;}
  static double SoftEase(double t){t=Math.Max(0,Math.Min(1,t));return t*t*t*(t*(t*6-15)+10);}
  static double Linear(byte channel){double c=channel/255.0;return c<=.04045?c/12.92:Math.Pow((c+.055)/1.055,2.4);}
  static Lab ToLab(Color color){double r=Linear(color.R),g=Linear(color.G),b=Linear(color.B);double l=Math.Pow(.4122214708*r+.5363325363*g+.0514459929*b,1.0/3);double m=Math.Pow(.2119034982*r+.6806995451*g+.1073969566*b,1.0/3);double s=Math.Pow(.0883024619*r+.2817188376*g+.6299787005*b,1.0/3);return new Lab(.2104542553*l+.7936177850*m-.0040720468*s,1.9779984951*l-2.4285922050*m+.4505937099*s,.0259040371*l+.7827717662*m-.8086757660*s);}

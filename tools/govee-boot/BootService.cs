@@ -49,7 +49,7 @@ namespace RetroDuetLighting {
   }
   static int Main(string[] args) { if(args.Length==1&&args[0]=="--configure")return ConfigureTimeout(); return StartServiceCtrlDispatcher(new[]{new Entry{Name=Name, Proc=mainCallback},new Entry()}) ? 0 : Marshal.GetLastWin32Error(); }
   static void Report(int state, int exitCode) {
-   var status = new Status {Type=0x10,State=state,Accepted=state==4 ? 0x105 : 0,ExitCode=exitCode,Checkpoint=state==2||state==3 ? 1 : 0,WaitHint=state==2||state==3 ? 5000 : 0};
+   var status = new Status {Type=0x10,State=state,Accepted=state==4 ? 0x145 : 0,ExitCode=exitCode,Checkpoint=state==2||state==3 ? 1 : 0,WaitHint=state==2||state==3 ? 5000 : 0};
    if(statusHandle!=IntPtr.Zero) SetServiceStatus(statusHandle, ref status);
   }
   static void ServiceMain(int argc, IntPtr argv) {
@@ -59,6 +59,7 @@ namespace RetroDuetLighting {
     Directory.CreateDirectory(DataRoot);
     if(File.Exists(Marker))File.Delete(Marker);
     LoadConfig();
+    LenovoPipe.Start(Log);
     bootWorker=new Thread(Boot){IsBackground=true,Name="Govee boot discovery"};
     // Start the worker before accepting stop controls, eliminating a start/stop race.
     bootWorker.Start(); Report(4,0); done.WaitOne();
@@ -66,6 +67,16 @@ namespace RetroDuetLighting {
   }
   static int Control(int control,int eventType,IntPtr data,IntPtr context) {
    if(control==4){Report(Interlocked.CompareExchange(ref stopping,0,0)==0?4:3,0);return 0;}
+   if(control==13){
+    if(eventType==4){
+     cancel.Set();
+     try{MarkShutdown();}catch(IOException error){Log(error.Message);}
+     try{PowerOff(3,80);}catch(Exception error){Log("Suspend: "+error.Message);}
+    }else if((eventType==18||eventType==7)&&stopping==0){
+     try{File.Delete(Marker);}catch(IOException error){Log(error.Message);}
+    }
+    return 0;
+   }
    if(control!=1&&control!=5&&control!=15)return 120;
    if(Interlocked.Exchange(ref stopping,1)==0){
     Report(3,0); cancel.Set();
@@ -154,7 +165,10 @@ namespace RetroDuetLighting {
         if(cancel.WaitOne(0)||devices.Contains(ip))continue;
         devices.Add(ip);
         for(int attempt=0;attempt<3&&!cancel.WaitOne(0);attempt++){
-         Send(udp,sender.Address,4003,White);Send(udp,sender.Address,4003,Bright);Send(udp,sender.Address,4003,On);
+         Send(udp,sender.Address,4003,On);if(cancel.WaitOne(120))break;
+         Send(udp,sender.Address,4003,White);if(cancel.WaitOne(120))break;
+         Send(udp,sender.Address,4003,Bright);if(cancel.WaitOne(120))break;
+         Send(udp,sender.Address,4003,On);
          if(attempt<2)cancel.WaitOne(60);
         }
         SaveHistory();
@@ -191,23 +205,28 @@ namespace RetroDuetLighting {
    catch(SocketException ex){error=ex.SocketErrorCode+" ("+ex.ErrorCode+"): "+ex.Message;return false;}
    catch(ObjectDisposedException ex){error=ex.Message;return false;}
   }
-  static void Finish(bool shutdown) {
-   try {
-    if(shutdown)try{File.WriteAllText(Marker,DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture));}catch(IOException error){Log(error.Message);}catch(UnauthorizedAccessException error){Log(error.Message);}
-    if(bootWorker!=null)bootWorker.Join(1500);
+  static void PowerOff(int rounds,int delay){
     string[] current;lock(gate){current=new List<string>(devices).ToArray();}
     string[] targets=SelectTargets(current,ReadHistory(HistoryPath,Log),allowed);
-    Log((shutdown?"System shutdown":"Service stop")+": current="+current.Length+", targets including history="+targets.Length+" ["+string.Join(", ",targets)+"].");
+    Log("Power off"+": current="+current.Length+", targets including history="+targets.Length+" ["+string.Join(", ",targets)+"].");
     var failures=new HashSet<string>();int sent=0,failed=0;
     using(var udp=new UdpClient(AddressFamily.InterNetwork)){
      udp.Client.SendTimeout=100;
      // No bind to discovery port 4002 during shutdown. Repeat over ~2 seconds.
-     for(int attempt=0;attempt<8&&targets.Length>0;attempt++){
+     for(int attempt=0;attempt<rounds&&targets.Length>0;attempt++){
       foreach(string ip in targets){string error;if(TrySendOff(udp,IPAddress.Parse(ip),4003,out error))sent++;else{failed++;if(failures.Add(ip))Log("Off UDP send failed for "+ip+": "+error);}}
-      if(attempt<7)Thread.Sleep(250);
+      if(attempt+1<rounds)Thread.Sleep(delay);
      }
     }
     Log("Off UDP attempts: sent="+sent+", failed="+failed+". Device acknowledgement not checked.");
+  }
+  static void MarkShutdown(){File.WriteAllText(Marker,DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture));}
+  static void Finish(bool shutdown) {
+   try {
+    if(shutdown)try{File.WriteAllText(Marker,DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture));}catch(IOException error){Log(error.Message);}catch(UnauthorizedAccessException error){Log(error.Message);}
+    PowerOff(8,250);
+    LenovoPipe.Stop();
+    if(bootWorker!=null)bootWorker.Join(1500);
    }catch(Exception error){Log(error.ToString());}
    finally{Report(1,0);done.Set();}
   }

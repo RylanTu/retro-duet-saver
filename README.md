@@ -1,4 +1,4 @@
-# Retro Duet Saver
+﻿# Retro Duet Saver
 
 **让 Macintosh 与 Windows 95/98 的经典界面，在像素画布里缓慢游走。**
 
@@ -48,6 +48,11 @@
 缓存范围见 [缓存说明](docs/DISK-CACHE-PREVIEW.md)，CPU、GPU 与内存对照见 [实测记录](docs/CACHE-BENCHMARK.md)。
 - 静态材质缓存复用、可见区域裁剪，时钟和交互内容按需更新。
 - 转场结束后卸下像素缩放着色器及采样表面。
+
+## 灯光组件
+解压后运行 Lighting/Install.cmd 安装或更新后台服务。安装时需要管理员权限，日常启动屏保使用普通权限。联想键盘和机身灯区可在设置中单独开启官方屏幕同步，当前适配 Legion Zone 2.0.30.11033 和第一档配置。退出屏保后服务恢复原灯效。Govee 开关机和休眠关灯也使用这个服务。
+
+运行 `Settings.cmd`，勾选所需的灯光开关，再点击 **保存设置**。用 `Screensaver.cmd` 启动全屏屏保测试。使用联想屏幕同步时，先在 Legion Zone 选择第一档原灯效，随后可以退出其托盘程序，保留联想系统服务。
 
 ## Govee 灯带联动
 

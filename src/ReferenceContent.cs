@@ -10,8 +10,22 @@ static partial class ReferenceContent {
  var raw=new byte[20*20*4];var data=tile.LockBits(new Rectangle(0,0,20,20),ImageLockMode.ReadOnly,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
  try{Marshal.Copy(data.Scan0,raw,0,raw.Length);}finally{tile.UnlockBits(data);}
  for(int i=0;i<raw.Length;i+=4){raw[i+3]=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=0;}
- var image=BitmapSource.Create(20,20,192,192,PixelFormats.Pbgra32,null,raw,80);image.Freeze();return Macintosh.FluidView.BakeInk(image);
+ var image=BitmapSource.Create(20,20,192,192,PixelFormats.Pbgra32,null,raw,80);image.Freeze();var ink=Macintosh.FluidView.BakeInk(image);
+ return RepeatedChecker(ink,new System.Windows.Int32Rect(0,0,20,20));
  }}
+ internal static BitmapSource RepeatedChecker(BitmapSource ink,System.Windows.Int32Rect sample){
+ var raw=new byte[20*20*4];
+ // Batch 16 x 16 identical cells in one retained texture for the moving desktop.
+ const int repeats=16, side=20*repeats;
+ ink.CopyPixels(sample,raw,80,0);
+ var block=new byte[side*side*4];
+ for(int y=0;y<20;y++){
+  for(int x=0;x<repeats;x++)Buffer.BlockCopy(raw,y*80,block,y*side*4+x*80,80);
+ }
+ for(int row=1;row<repeats;row++)Buffer.BlockCopy(block,0,block,row*20*side*4,20*side*4);
+ var texture=BitmapSource.Create(side,side,192,192,PixelFormats.Pbgra32,null,block,side*4);
+ texture.Freeze();return texture;
+ }
 
  static readonly Dictionary<int,BitmapSource> cache=new Dictionary<int,BitmapSource>();static readonly Queue<int> order=new Queue<int>();
  public static BitmapSource Image(int owner,int scene){int key=owner*100+scene;BitmapSource value;lock(cacheGate){if(cache.TryGetValue(key,out value))return value;}
@@ -36,7 +50,11 @@ static partial class ReferenceContent {
  void Text(Graphics g,string text,int x,int y,int p,bool mono,Brush brush){foreach(char c in text){Sprite(g,Glyph(c,mono),x,y,p,brush);x+=Advance(c,mono)*p;}}
  void Center(Graphics g,string text,int y,int p,bool mono){Text(g,text,600-Width(text,p,mono)/2,y,p,mono,black);}
  void Line(Graphics g,int x,int y,int w,Brush b){for(int i=0;i<w;i+=3)Cell(g,x+i,y,3,b);}
- void Edge(Graphics g,int x,int y,int w,int h,Brush top,Brush bottom){Fill(g,top,x,y,w,3);Fill(g,top,x,y,3,h);Fill(g,bottom,x,y+h-3,w,3);Fill(g,bottom,x+w-3,y,3,h);}
+ void Edge(Graphics g,int x,int y,int w,int h,Brush top,Brush bottom){var state=g.Save();
+ g.IntersectClip(new Rectangle(x,y,w,h));
+ for(int dx=0;dx<w;dx+=3){Cell(g,x+dx,y,3,top);Cell(g,x+dx,y+h-3,3,bottom);}
+ for(int dy=3;dy<h-3;dy+=3){Cell(g,x,y+dy,3,top);Cell(g,x+w-3,y+dy,3,bottom);}
+ g.Restore(state);}
  void Box(Graphics g,int x,int y,int w,int h,bool inset){Fill(g,paper,x,y,w,h);Edge(g,x,y,w,h,inset?gray:light,inset?light:black);Edge(g,x+3,y+3,w-6,h-6,inset?black:paper,inset?paper:gray);}
  void Frame(Graphics g,string title,string menus){if(!mac){Art.ReferenceFrame(g,title,menus.Split(new[]{"    "},StringSplitOptions.RemoveEmptyEntries));return;}
  Box(g,40,55,1120,690,false);
@@ -63,9 +81,6 @@ static partial class ReferenceContent {
  using(var ink=Graphics.FromImage(tile)){ink.Clear(System.Drawing.Color.White);ink.ScaleTransform(2,2);
  for(int y=-5;y<10;y+=5)for(int x=-5;x<10;x+=5)if((x+y)%10==0)Cell(ink,x,y,5,black);}
  return tile;
- }
- void Desktop(Graphics g){
- using(var tile=DesktopTile())using(var brush=new TextureBrush(tile)){brush.ScaleTransform(.5f,.5f);g.FillRectangle(brush,0,0,1200,800);}
  }
  void Flag(Graphics g,int x,int y,int p){for(int row=0;row<10;row++)for(int col=0;col<18;col++){bool on=col<7||col>9;if(on&&row!=4&&row!=5){int wave=(int)Math.Round(1.5*Math.Sin(col*.3));Cell(g,x+col*p,y+(row+wave)*p,p,black);}}}
 
@@ -111,7 +126,7 @@ static partial class ReferenceContent {
  // Explorer's status line gives the icon field a defined lower edge.
  if(!mac){Line(g,53,715,1094,gray);Text(g,icons.Length+" object(s)",70,722,1,false,black);}
  }
- public void Draw(Graphics g,int scene){if(!(mac&&(scene==7||scene==11)))Desktop(g);if(!mac&&scene==19&&State>=1){ControlOverview(g);WinMouseButtons(g);return;}if(DrawExtended(g,scene))return;if(scene==12||scene==13){Assistant(g,scene==13);return;}
+ public void Draw(Graphics g,int scene){if(!mac&&scene==19&&State>=1){ControlOverview(g);WinMouseButtons(g);return;}if(DrawExtended(g,scene))return;if(scene==12||scene==13){Assistant(g,scene==13);return;}
  if(scene==7||scene==11){if(mac){if(scene==11){Sprite(g,BootDisk,520,285,5,black);}else{Fill(g,paper,537,285,125,160);Sprite(g,Happy,537,285,5,black);}}else if(scene==11){Fill(g,paper,180,330,840,100);Center(g,"Starting MS-DOS...",350,4,true);}else{Flag(g,490,285,13);Fill(g,paper,230,460,740,70);Center(g,"Starting Windows 95...",470,3,true);}return;}
  if(scene==10){Frame(g,"Welcome to Macintosh","File    Edit    View    Special");Sprite(g,Happy,537,245,5,black);Center(g,"Welcome to Macintosh.",485,5,false);Center(g,"January 24, 1984",585,3,false);return;}
  if(scene==8){Frame(g,mac?"Untitled - SimpleText":"Document - WordPad",mac?"File    Edit    Search    Font    Style":"File    Edit    View    Insert    Format    Help");

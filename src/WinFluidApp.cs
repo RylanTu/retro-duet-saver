@@ -124,7 +124,9 @@ sealed class FluidView:Grid {
  static readonly int[] LightCameraRegions={0,1,3,6,4,2};
 
  public FluidView(Options options,bool saver,bool embedded,SolidColorBrush commonPaper=null){if(commonPaper!=null)paper=commonPaper;Options=options;ink.Freeze();control.Freeze();this.saver=saver;this.embedded=embedded;Hint=!saver&&!embedded;ClipToBounds=true;Background=paper;Cursor=Cursors.None;world.RenderTransform=camera;world.HorizontalAlignment=HorizontalAlignment.Left;world.VerticalAlignment=VerticalAlignment.Top;
- bool createdMaterials=desktopMaterials==null;if(createdMaterials)CreateMaterials();AddSurface(world,desktopMaterials,0,0);
+ bool createdMaterials=desktopMaterials==null;if(createdMaterials)CreateMaterials();
+ if(commonPaper==null)AddSurface(world,desktopMaterials,0,0);
+ else{var panels=RetroWindows.SharedView.NativePaper(paper,false);world.Children.Add(panels);AddSurface(panels,desktopMaterials,0,0);}
  AddPath(signatureAuthor);AddPath(signatureMotto);AddPath(signatureCaret);signatureCaret.RenderTransform=signatureCaretShift;
  UpdateSignature(0);
  AddMineLayer();BuildPaintMenu();paintBitmap=new WriteableBitmap(PaintPixels,PaintPixels,192,192,PixelFormats.Pbgra32,null);paintStroke.Source=paintBitmap;paintStroke.Clip=new RectangleGeometry(new Rect(0,0,240,237));WCanvas.SetLeft(paintStroke,PaintOriginX);WCanvas.SetTop(paintStroke,PaintOriginY);world.Children.Add(paintStroke);
@@ -174,6 +176,7 @@ sealed class FluidView:Grid {
  static BitmapSource Mask(bool dialog){using(var b=Art.Texture(dialog)){var rect=new Drawing.Rectangle(0,0,b.Width,b.Height);var data=b.LockBits(rect,Drawing.Imaging.ImageLockMode.ReadOnly,Drawing.Imaging.PixelFormat.Format32bppPArgb);try{var raw=new byte[data.Stride*b.Height];Marshal.Copy(data.Scan0,raw,0,raw.Length);for(int i=0;i<raw.Length;i+=4){byte alpha=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=0;raw[i+3]=alpha;}var image=BitmapSource.Create(b.Width,b.Height,192,192,PixelFormats.Pbgra32,null,raw,data.Stride);image.Freeze();return Macintosh.FluidView.BakeInk(image);}finally{b.UnlockBits(data);}}}
 
  bool compositeMode;double nextCull=-1,nextActor=-1;int lastCompositeScene=-2;Rect lastCullRect;
+ internal BitmapSource DesktopInk { get { return desktopMaterials[0].Image; } }
  public WCanvas DetachWorld(){compositeMode=true;Children.Remove(world);world.RenderTransform=Transform.Identity;world.Children.Remove(pointer);return world;}
  public FrameworkElement CursorVisual{get{return pointer;}}
  public string FrameState{get{return string.Format(CultureInfo.InvariantCulture,"scene={0}, cursor=({1:F2},{2:F2}), dialog=({3:F2},{4:F2}), open={5}, volume_grip=({6:F2},{7:F2})",priorScene,cursorShift.X,cursorShift.Y,dialogX,dialogY,dialogOpen,volumeShift.X+19,volumeShift.Y+10)+string.Format(CultureInfo.InvariantCulture,", keyboard_grip=({0:F2},622), blink_period_s={1:F3}",speedShift.X+16,1.6-blinkPosition*.65);}}
@@ -198,7 +201,7 @@ sealed class FluidView:Grid {
  // Oklab interpolation keeps perceived lightness consistent through long color fades.
  struct Lab {public double L,A,B;public Lab(double l,double a,double b){L=l;A=a;B=b;}}
  static readonly Lab[] BgLabs=MakeLabs(Bg);static readonly Lab[] SpectrumLabs=MakeLabs(ReferenceSpectrum);
- static Lab[] MakeLabs(Color[] colors){var labs=new Lab[colors.Length];for(int i=0;i<labs.Length;i++)labs[i]=ToLab(colors[i]);return labs;}
+ static Lab[] MakeLabs(Color[] colors){var labs=new Lab[colors.Length];for(int i=0;i<labs.Length;i++){var lab=ToLab(colors[i]);lab.L+=.17*Math.Max(0,.77-lab.L);labs[i]=lab;}return labs;}
  static double SoftEase(double t){t=Math.Max(0,Math.Min(1,t));return t*t*t*(t*(t*6-15)+10);}
  static double Linear(byte channel){double c=channel/255.0;return c<=.04045?c/12.92:Math.Pow((c+.055)/1.055,2.4);}
  static Lab ToLab(Color color){double r=Linear(color.R),g=Linear(color.G),b=Linear(color.B);double l=Math.Pow(.4122214708*r+.5363325363*g+.0514459929*b,1.0/3);double m=Math.Pow(.2119034982*r+.6806995451*g+.1073969566*b,1.0/3);double s=Math.Pow(.0883024619*r+.2817188376*g+.6299787005*b,1.0/3);return new Lab(.2104542553*l+.7936177850*m-.0040720468*s,1.9779984951*l-2.4285922050*m+.4505937099*s,.0259040371*l+.7827717662*m-.8086757660*s);}
@@ -252,7 +255,7 @@ sealed class FluidView:Grid {
  
  volumeShift.Y=Art.SoundTrackY+volume*Art.SoundTravel;double knobAlpha=pressed&&scene==2?.88:1;if(volumeKnob.Opacity!=knobAlpha)volumeKnob.Opacity=knobAlpha;dialogShift.X=1065+dialogX;dialogShift.Y=855+dialogY;if(dialogOpen&&!dialogWasOpen){dialogPopAt=t;dialog.CacheMode=null;}dialogWasOpen=dialogOpen;dialog.Visibility=dialogOpen?Visibility.Visible:Visibility.Hidden;
  speedShift.X=1320+blinkPosition*417;double period=1.6-blinkPosition*.65;if(blinkAt<0)blinkAt=t;blinkPhase=(blinkPhase+Math.Max(0,Math.Min(.25,t-blinkAt))/period)%1;blinkAt=t;if(visibleWorld.IntersectsWith(MouseArea)){var state=blinkPhase<.5?Visibility.Visible:Visibility.Hidden;if(caret.Visibility!=state)caret.Visibility=state;}
- if(caret.Data==null)caret.Data=Pixels(new[]{"111","010","010","010","010","010","010","111"},1925,583,4);
+ if(caret.Data==null){var box=Art.BlinkPreview;caret.Data=Pixels(new[]{"111","010","010","010","010","010","010","111"},box.X+(box.Width-12)/2,box.Y+(box.Height-32)/2,4);}
  if(priorScene!=scene){actorChangedAt=t;actorFromX=cursorShift.X;actorFromY=cursorShift.Y;priorScene=scene;}
  double approach=Ease((t-actorChangedAt)/1.2);cursorShift.X=Lerp(actorFromX,cx,approach);cursorShift.Y=Lerp(actorFromY,cy,approach);pointer.Visibility=active?Visibility.Visible:Visibility.Collapsed;
  }

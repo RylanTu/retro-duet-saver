@@ -44,6 +44,7 @@ namespace RetroWindows {
    worker = new Thread(Run) { IsBackground = true, Name = "Govee LAN ambient lighting" };
    if (Environment.GetEnvironmentVariable("RETRO_DUET_GOVEE") == "0") return;
    AppDomain.CurrentDomain.ProcessExit += ProcessExit;
+   Microsoft.Win32.SystemEvents.PowerModeChanged += PowerChanged;
    worker.Start();
   }
 
@@ -64,6 +65,7 @@ namespace RetroWindows {
     (byte)Math.Round(peak - (peak - color.G) * stretch),
     (byte)Math.Round(peak - (peak - color.B) * stretch));
   }
+  void PowerChanged(object sender,Microsoft.Win32.PowerModeChangedEventArgs e){if(e.Mode==Microsoft.Win32.PowerModes.Suspend)RequestShutdown();}
   public void RequestShutdown() { systemShutdown=true; StopWorker(); }
   internal static int DiscoveryIdleMilliseconds(double now,double nextScan,int count) {
    if(count>0 || now<nextScan-28)return 0;
@@ -79,6 +81,7 @@ namespace RetroWindows {
    if (Interlocked.Exchange(ref disposed, 1) != 0) return;
    sampler.Stop();
    sampler.Tick -= Sample;
+   Microsoft.Win32.SystemEvents.PowerModeChanged -= PowerChanged;
    StopWorker();
    AppDomain.CurrentDomain.ProcessExit -= ProcessExit;
    if (!worker.IsAlive) wake.Dispose();

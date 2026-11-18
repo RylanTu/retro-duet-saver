@@ -1,4 +1,4 @@
-﻿param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.11')
+param([ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$|^[0-9]+\.[0-9]+$')][string]$Version = '3.6.18')
 $ErrorActionPreference = 'Stop'
 $rootDir = $PSScriptRoot
 $distDir = Join-Path $rootDir 'dist'
@@ -20,6 +20,9 @@ foreach ($fileName in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md')) { Copy-
 Copy-Item -LiteralPath (Join-Path $rootDir 'docs') -Destination $packageDir -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $rootDir 'examples') -Destination $packageDir -Recurse -Force
 Get-ChildItem -LiteralPath (Join-Path $rootDir 'scripts') -Filter '*.cmd' | Copy-Item -Destination $packageDir -Force
+& (Join-Path $rootDir 'tools/govee-boot/build.ps1') -Version $Version
+$lightingDir=New-Item -ItemType Directory -Path (Join-Path $packageDir 'Lighting') -Force
+Get-ChildItem (Join-Path $distDir ('GoveeBootLighting-v'+$Version)) | Copy-Item -Destination $lightingDir.FullName -Recurse -Force
 $zipPath = Join-Path $distDir ('RetroDuetSaver-v' + $Version + '-windows.zip')
 Compress-Archive -Path (Join-Path $packageDir '*') -DestinationPath $zipPath -Force
 $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -14,7 +14,7 @@ sealed class MultiScreenSession:IDisposable {
  readonly Dispatcher dispatcher=Dispatcher.CurrentDispatcher;
  readonly SharedView source;readonly Grid sceneSurface=new Grid{ClipToBounds=true,IsHitTestVisible=false};
  readonly Options options;
- GoveeLanLighting lighting;
+ GoveeLanLighting lighting;LenovoOfficialSync legion;
  readonly List<DuetWindow> windows=new List<DuetWindow>();
  readonly BitmapCacheBrush sharedBrush;
  readonly BitmapCache sceneCache=new BitmapCache();
@@ -36,7 +36,7 @@ sealed class MultiScreenSession:IDisposable {
  SystemEvents.DisplaySettingsChanged+=DisplayChanged;
  if(Application.Current!=null)Application.Current.SessionEnding+=SessionEnding;
  }
- public void Show(){Rebuild();if(options.GoveeLighting&&lighting==null)lighting=new GoveeLanLighting(delegate{return source.AmbientColor;},options.GoveeSaturation);inputClock.Restart();inputTimer.Tick+=CheckInput;inputTimer.Start();}
+ public void Show(){Rebuild();if(options.LenovoLighting&&legion==null)legion=new LenovoOfficialSync();if(options.GoveeLighting&&lighting==null)lighting=new GoveeLanLighting(delegate{return source.AmbientColor;},options.GoveeSaturation);inputClock.Restart();inputTimer.Tick+=CheckInput;inputTimer.Start();}
  void SessionEnding(object sender,SessionEndingCancelEventArgs e){if(e.ReasonSessionEnding==ReasonSessionEnding.Shutdown&&lighting!=null)lighting.RequestShutdown();}
  void CheckInput(object sender,EventArgs e){if(disposed||closing||rebuilding)return;var info=new LASTINPUTINFO{Size=(uint)Marshal.SizeOf(typeof(LASTINPUTINFO))};GetLastInputInfo(ref info);var cursor=Forms.Cursor.Position;if(inputState.Update(inputClock.Elapsed.TotalSeconds,new Point(cursor.X,cursor.Y),info.Time)){if(windows.Count>0)windows[0].Close();}}
  void DisplayChanged(object sender,EventArgs e){
@@ -88,7 +88,7 @@ sealed class MultiScreenSession:IDisposable {
  }
  public void Dispose(){
  if(disposed)return;disposed=true;closing=true;inputTimer.Stop();inputTimer.Tick-=CheckInput;
- if(lighting!=null){lighting.Dispose();lighting=null;}
+ if(legion!=null){legion.Dispose();legion=null;}if(lighting!=null){lighting.Dispose();lighting=null;}
  SystemEvents.DisplaySettingsChanged-=DisplayChanged;
  if(Application.Current!=null)Application.Current.SessionEnding-=SessionEnding;
  topologyTimer.Stop();topologyTimer.Tick-=RebuildAfterChange;
