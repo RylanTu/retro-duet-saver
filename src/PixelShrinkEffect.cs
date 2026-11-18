@@ -23,7 +23,7 @@ sealed partial class SharedView {
  // Match the broad spatial progression to the existing entry/exit direction.
  Point direction;switch(transitionKind){case 1:direction=new Point(-1,1);break;case 2:direction=new Point(1,0);break;case 3:case 8:direction=new Point(0,-1);break;case 7:direction=new Point(-1,0);break;case 4:direction=new Point(-1,-1);break;default:direction=new Point(1,1);break;}
  pixelTransition.Configure(camera,ActualWidth,ActualHeight,Math.Max(0,Math.Min(1,progress)),shot.Owner==0&&shot.Scene==19?3:5,direction);
- if(pixelSurface.Fill==null)pixelSurface.Fill=pixelSource;pixelSource.Viewbox=new Rect(0,0,ActualWidth,ActualHeight);pixelSurface.Visibility=Visibility.Visible;sceneHost.Opacity=0;if(pixelSurface.Effect!=pixelTransition)pixelSurface.Effect=pixelTransition;
+ if(pixelSurface.Fill==null)pixelSurface.Fill=pixelSource;var viewport=new Rect(0,0,ActualWidth,ActualHeight);if(pixelSource.Viewbox!=viewport)pixelSource.Viewbox=viewport;pixelSurface.Visibility=Visibility.Visible;sceneHost.Opacity=0;if(pixelSurface.Effect!=pixelTransition)pixelSurface.Effect=pixelTransition;
  transitionVeil.Visibility=Visibility.Hidden;
  }
 }

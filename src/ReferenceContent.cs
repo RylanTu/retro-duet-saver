@@ -1,11 +1,18 @@
-﻿using System;using System.Collections.Generic;using System.Drawing;using System.Drawing.Imaging;using System.Runtime.InteropServices;using System.Windows.Media;using System.Windows.Media.Imaging;
+using System;using System.Collections.Generic;using System.Drawing;using System.Drawing.Imaging;using System.Runtime.InteropServices;using System.Windows.Media;using System.Windows.Media.Imaging;
 using Brush=System.Drawing.Brush;
 namespace RetroWindows {
 static partial class ReferenceContent {
  public static Geometry BootOutline(bool happy){return Painter.BootOutline(happy);}
  static readonly object cacheGate=new object();static readonly HashSet<int> pending=new HashSet<int>();
  public static BitmapSource TryImage(int owner,int scene){int key=owner*100+scene;lock(cacheGate){BitmapSource image;if(cache.TryGetValue(key,out image))return image;if(pending.Add(key))System.Threading.ThreadPool.QueueUserWorkItem(delegate{try{Image(owner,scene);}finally{lock(cacheGate)pending.Remove(key);}});return null;}}
- public static BitmapSource CheckerTile(){var visual=new DrawingVisual();using(var dc=visual.RenderOpen()){foreach(var point in new[]{new System.Windows.Point(0,0),new System.Windows.Point(5,5)}){dc.DrawRectangle(System.Windows.Media.Brushes.Black,null,new System.Windows.Rect(point.X+.225,point.Y+.225,4.45,4.45));}}var image=new RenderTargetBitmap(20,20,192,192,PixelFormats.Pbgra32);image.Render(visual);image.Freeze();return Macintosh.FluidView.BakeInk(image);}
+ public static BitmapSource CheckerTile(){
+ using(var painter=new Painter(true))using(var tile=painter.DesktopTile()){
+ var raw=new byte[20*20*4];var data=tile.LockBits(new Rectangle(0,0,20,20),ImageLockMode.ReadOnly,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+ try{Marshal.Copy(data.Scan0,raw,0,raw.Length);}finally{tile.UnlockBits(data);}
+ for(int i=0;i<raw.Length;i+=4){raw[i+3]=(byte)(255-raw[i]);raw[i]=raw[i+1]=raw[i+2]=0;}
+ var image=BitmapSource.Create(20,20,192,192,PixelFormats.Pbgra32,null,raw,80);image.Freeze();return Macintosh.FluidView.BakeInk(image);
+ }}
+
  static readonly Dictionary<int,BitmapSource> cache=new Dictionary<int,BitmapSource>();static readonly Queue<int> order=new Queue<int>();
  public static BitmapSource Image(int owner,int scene){int key=owner*100+scene;BitmapSource value;lock(cacheGate){if(cache.TryGetValue(key,out value))return value;}
  value=DiskCache.Image("scene-"+key,2400,1600);
@@ -51,7 +58,15 @@ static partial class ReferenceContent {
  static readonly string[] BrushIcon={"0000000111","0000001110","0000011100","0000111000","0001110000","0011100000","0111110000","1111110000","1111110000","0111100000"};
  static readonly string[] Printer={"00111111100","00100000100","00111111100","11111111111","10000000001","10111111101","10000000001","11111111111","00100000100","00111111100"};
  static readonly string[] Keyboard={"111111111111111","100000000000001","101010101010101","100000000000001","101010101010101","100000000000001","101111111111101","100000000000001","111111111111111"};
- void Desktop(Graphics g){int[,] bayer={{0,8,2,10},{12,4,14,6},{3,11,1,9},{15,7,13,5}};for(int y=0;y<800;y+=5)for(int x=0;x<1200;x+=5){double edge=Math.Max(0,Math.Min(1,Math.Min(Math.Min(x/180.0,(1200-x)/180.0),Math.Min(y/120.0,(800-y)/120.0))));if((x/5+y/5)%2==0&&bayer[(x/5)%4,(y/5)%4]<edge*16)Cell(g,x,y,5,black);}}
+ public Bitmap DesktopTile(){
+ var tile=new Bitmap(20,20,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+ using(var ink=Graphics.FromImage(tile)){ink.Clear(System.Drawing.Color.White);ink.ScaleTransform(2,2);
+ for(int y=-5;y<10;y+=5)for(int x=-5;x<10;x+=5)if((x+y)%10==0)Cell(ink,x,y,5,black);}
+ return tile;
+ }
+ void Desktop(Graphics g){
+ using(var tile=DesktopTile())using(var brush=new TextureBrush(tile)){brush.ScaleTransform(.5f,.5f);g.FillRectangle(brush,0,0,1200,800);}
+ }
  void Flag(Graphics g,int x,int y,int p){for(int row=0;row<10;row++)for(int col=0;col<18;col++){bool on=col<7||col>9;if(on&&row!=4&&row!=5){int wave=(int)Math.Round(1.5*Math.Sin(col*.3));Cell(g,x+col*p,y+(row+wave)*p,p,black);}}}
 
  // Pixel paths retain the same cell pitch and relief as the desktop typography.

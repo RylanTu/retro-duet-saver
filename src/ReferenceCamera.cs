@@ -12,6 +12,7 @@ namespace RetroWindows {sealed partial class SharedView {
  case 5: shot.Drift=new Point(230,150);break;
  case 7: shot.Drift=new Point(280,-30);break;
  case 10: shot.Drift=new Point(110,170);break;
+ case 9: shot.Zoom*=1.24;break;
  case 18: shot.Drift=new Point(300,-140);break;
  case 14: shot.Drift=new Point(190,120);break;
  case 15: shot.Drift=new Point(240,-90);break;

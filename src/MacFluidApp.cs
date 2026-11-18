@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -155,13 +155,17 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  void AddSurface(WCanvas parent,List<SurfaceMaterial> materials,int originX,int originY){
  foreach(var m in materials){var tile=new Image{Width=m.Width,Height=m.Height,Source=m.Image,Stretch=Stretch.Fill,IsHitTestVisible=false};WCanvas.SetLeft(tile,m.X);WCanvas.SetTop(tile,m.Y);parent.Children.Add(tile);var bounds=new Rect(originX+m.X-12,originY+m.Y-12,m.Width+24,m.Height+24);if(originX!=0)bounds.Inflate(160,90);if(parent!=dialog)surfaceTiles.Add(new SurfaceTile{Visual=tile,Bounds=bounds});}
  }
- // Bake the immutable face and its soft shadow once. Foreground alpha is copied unchanged.
+ // Bake directional relief into the monochrome texture so the palette supplies the edge light.
  internal static BitmapSource BakeInk(BitmapSource mask){
- var shade=SoftShadow(mask);int w=mask.PixelWidth,h=mask.PixelHeight,sw=shade.PixelWidth,sh=shade.PixelHeight;
- var face=new byte[w*h*4];mask.CopyPixels(face,w*4,0);var shadow=new byte[sw*sh*4];shade.CopyPixels(shadow,sw*4,0);
- for(int y=0;y<h;y++){double sy=y*.5-2.1;int iy=(int)Math.Floor(sy);double fy=sy-iy;for(int x=0;x<w;x++){double sx=x*.5-1.2;int ix=(int)Math.Floor(sx);double fx=sx-ix,alpha=0;
- if(ix>=0&&iy>=0&&ix+1<sw&&iy+1<sh){double upper=shadow[(iy*sw+ix)*4+3]*(1-fx)+shadow[(iy*sw+ix+1)*4+3]*fx,lower=shadow[((iy+1)*sw+ix)*4+3]*(1-fx)+shadow[((iy+1)*sw+ix+1)*4+3]*fx;alpha=(upper*(1-fy)+lower*fy)*.34;}
- int i=(y*w+x)*4;int original=face[i+3];face[i]=face[i+1]=face[i+2]=0;face[i+3]=(byte)Math.Min(255,original+alpha*(255-original)/255.0);
+ int w=mask.PixelWidth,h=mask.PixelHeight;
+ var face=new byte[w*h*4];mask.CopyPixels(face,w*4,0);int sw=w/2,sh=h/2;var shadow=SoftShadow(face,w,h);
+ for(int y=h-1;y>=0;y--){double sy=y*.5-1.65;int iy=(int)Math.Floor(sy);double fy=sy-iy;for(int x=w-1;x>=0;x--){double sx=x*.5-.95;int ix=(int)Math.Floor(sx);double fx=sx-ix,alpha=0;
+ if(ix>=0&&iy>=0&&ix+1<sw&&iy+1<sh){double upper=shadow[iy*sw+ix]*(1-fx)+shadow[iy*sw+ix+1]*fx,lower=shadow[(iy+1)*sw+ix]*(1-fx)+shadow[(iy+1)*sw+ix+1]*fx;alpha=(upper*(1-fy)+lower*fy)*.29;}
+ int i=(y*w+x)*4;int original=face[i+3];// Reverse traversal leaves the upper and left neighbours unmodified.
+ int top=y>0?face[i-w*4+3]:original,left=x>0?face[i-1]:original;
+ int relief=(2*Math.Max(0,original-top)+Math.Max(0,original-left))/22;
+ face[i]=face[i+1]=face[i+2]=0;
+ face[i+3]=(byte)Math.Min(255,original-relief+alpha*(255-original)/255.0);
  }}
  var result=BitmapSource.Create(w,h,192,192,PixelFormats.Pbgra32,null,face,w*4);result.Freeze();return result;
  }
@@ -170,14 +174,12 @@ double volume=1.0/3,volumeEntry=1.0/3;int patternState=-1;bool patternClick1Done
  cameraMatrix.Invert();visibleWorld=System.Windows.Rect.Transform(new Rect(0,0,ActualWidth,ActualHeight),cameraMatrix);visibleWorld.Inflate(12,12);
  foreach(var tile in surfaceTiles){bool show=visibleWorld.IntersectsWith(tile.Bounds);if(show!=tile.Visible){tile.Visual.Opacity=show?1:0;tile.Visible=show;}}
  }
- static BitmapSource SoftShadow(BitmapSource mask){
- int sw=mask.PixelWidth,sh=mask.PixelHeight,w=sw/2,h=sh/2,r=2;
- var source=new byte[sw*sh*4];mask.CopyPixels(source,sw*4,0);
+ static byte[] SoftShadow(byte[] source,int sw,int sh){
+ int w=sw/2,h=sh/2,r=2;
  var temp=new byte[w*h];var smooth=new byte[w*h];
  for(int y=0;y<h;y++)for(int x=0;x<w;x++){int sum=0;for(int k=-r;k<=r;k++){int xx=Math.Max(0,Math.Min(w-1,x+k));sum+=source[((y*2)*sw+xx*2)*4+3];}temp[y*w+x]=(byte)(sum/(r*2+1));}
  for(int y=0;y<h;y++)for(int x=0;x<w;x++){int sum=0;for(int k=-r;k<=r;k++)sum+=temp[Math.Max(0,Math.Min(h-1,y+k))*w+x];smooth[y*w+x]=(byte)(sum/(r*2+1));}
- var rgba=new byte[w*h*4];for(int i=0;i<smooth.Length;i++)rgba[i*4+3]=smooth[i];
- var image=BitmapSource.Create(w,h,96,96,PixelFormats.Pbgra32,null,rgba,w*4);image.Freeze();return image;
+ return smooth;
  }
 
  FrameworkElement Knob(double w,double h){w=Math.Round(w/5)*5;h=Math.Round(h/5)*5;var group=new WCanvas{Width=w,Height=h};var shadow=new Rectangle{Width=w,Height=h,Fill=ink,Opacity=.18,RenderTransform=new TranslateTransform(1.3,2)};group.Children.Add(shadow);group.Children.Add(new Rectangle{Width=w,Height=h,Fill=paper});var frame=new StreamGeometry{FillRule=FillRule.Nonzero};using(var c=frame.Open()){for(double x=0;x<w;x+=5){Rect(c,x+.225,.225,4.55,4.55);Rect(c,x+.225,h-5+.225,4.55,4.55);}for(double y=5;y<h-5;y+=5){Rect(c,.225,y+.225,4.55,4.55);Rect(c,w-5+.225,y+.225,4.55,4.55);}for(double x=10;x<w-10;x+=5)Rect(c,x+.225,Math.Floor(h*.4/5)*5+.225,4.55,4.55);}frame.Freeze();group.Children.Add(new Path{Data=frame,Fill=ink});return group;}
