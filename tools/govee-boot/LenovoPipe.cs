@@ -14,7 +14,7 @@ namespace RetroDuetLighting {
    acl.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.InteractiveSid,null),PipeAccessRights.ReadWrite,AccessControlType.Allow));return acl;
   }
   static bool ValidClient(NamedPipeServerStream pipe){uint pid;if(!GetNamedPipeClientProcessId(pipe.SafePipeHandle,out pid))return false;
-   try{using(var process=Process.GetProcessById((int)pid)){if(process.SessionId==0)return false;string name=process.ProcessName;return name.Equals("RetroDuetSaver",StringComparison.OrdinalIgnoreCase);}}catch(ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return false;}
+   try{using(var process=Process.GetProcessById((int)pid)){if(process.SessionId==0)return false;string name=process.ProcessName;return name.Equals("RetroDuetSaver",StringComparison.OrdinalIgnoreCase)||name.Equals("RetroDuetSaver.scr",StringComparison.OrdinalIgnoreCase);}}catch(ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return false;}
   }
   static Dictionary<string,object> Pending(){return (Dictionary<string,object>)new JavaScriptSerializer().DeserializeObject(File.ReadAllText(Journal));}
   static bool Restore(OfficialEngine engine,Dictionary<string,object> before){for(int i=0;i<3;i++)try{engine.Restore(before);File.Delete(Journal);log("Lenovo original profile and effect restored.");return true;}catch(Exception e){log("Lenovo restore attempt: "+e.Message);Thread.Sleep(200);}return false;}
